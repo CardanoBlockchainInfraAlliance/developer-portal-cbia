@@ -356,26 +356,34 @@ function AllToolsSection({ apps, sortOption, isUnfiltered, heading }) {
 
 function AllToolsReveal() {
   const [shown, setShown] = useState(false);
-  if (shown) {
-    return (
-      <AllToolsSection
-        apps={null}
-        sortOption={SORT_IDS.ALPHABETICAL}
-        isUnfiltered={true}
-        heading={`All ${SortedShowcases.length} tools, A to Z`}
-      />
-    );
-  }
   return (
-    <section className={clsx("container", styles.section, styles.allAppsReveal)}>
-      <button
-        type="button"
-        className={clsx("button button--secondary", styles.showAllButton)}
-        onClick={() => setShown(true)}
-      >
-        {`View all ${SortedShowcases.length} tools alphabetically`}
-      </button>
-    </section>
+    <>
+      <section className={clsx("container", styles.section, styles.allAppsReveal)}>
+        {!shown && (
+          <button
+            type="button"
+            className={clsx("button button--secondary", styles.showAllButton)}
+            onClick={() => setShown(true)}
+          >
+            {`View all ${SortedShowcases.length} tools alphabetically`}
+          </button>
+        )}
+        <Link
+          to="/tools-rels-compat/"
+          className={clsx("button button--outline button--secondary", styles.showAllButton)}
+        >
+          Explore relationships and compatibility
+        </Link>
+      </section>
+      {shown && (
+        <AllToolsSection
+          apps={null}
+          sortOption={SORT_IDS.ALPHABETICAL}
+          isUnfiltered={true}
+          heading={`All ${SortedShowcases.length} tools, A to Z`}
+        />
+      )}
+    </>
   );
 }
 

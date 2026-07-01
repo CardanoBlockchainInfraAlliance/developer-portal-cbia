@@ -1,3 +1,31 @@
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.breadcrumb a {
+  color: var(--ifm-color-emphasis-700);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  color: var(--ifm-color-primary);
+}
+
+.crumbSep {
+  color: var(--ifm-color-emphasis-400);
+}
+
+.crumbCurrent {
+  color: var(--ifm-color-emphasis-900);
+  font-weight: 500;
+}
+
 /* Sticky so the controls stay visible when applying a filter collapses the
    page height (the browse -> filtered layout swap clamps scroll toward top). */
 .controlsSticky {
@@ -86,6 +114,7 @@
 .allAppsReveal {
   display: flex;
   justify-content: center;
+  gap: 1rem;
   margin-top: 1.5rem;
 }
 
