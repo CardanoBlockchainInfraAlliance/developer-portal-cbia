@@ -45,6 +45,7 @@
  *
  * Usage:
  *   GITHUB_TOKEN=ghp_xxx node scripts/analyze-builder-tools.mjs [--input tools.js] [--out enriched-tools]
+ *     [--releases-from enriched-tools.js] [--offline]
  *   (see README.CBIA.md for the `yarn enrich-tools` / `npm run enrich-tools` shortcut)
  *
  * No npm install needed — uses only Node.js 18+ built-ins.
@@ -61,11 +62,14 @@ const { values: args } = parseArgs({
     token: { type: "string", short: "t" },
     out:   { type: "string", short: "o", default: "enriched-tools" },
     input: { type: "string", short: "i", default: "tools.js" },
+    "releases-from": { type: "string", short: "r" },
+    offline: { type: "boolean" },
     help:  { type: "boolean", short: "h" },
   },
 });
 if (args.help) {
-  console.log("Usage: node analyze-builder-tools.mjs [--token <PAT>] [--input <file>] [--out <basename>]");
+  console.log("Usage: node analyze-builder-tools.mjs [--token <PAT>] [--input <file>] [--out <basename>]\n" +
+              "         [--releases-from <file>] [--offline]");
   process.exit(0);
 }
 
@@ -83,16 +87,31 @@ const INPUT_FILE   = resolve(args.input);
 // "type": "module", so Node would treat a literal `.js` import as CommonJS and
 // choke on `export`.  Copy the text to a temp `.mjs` file and import that, so
 // the input file can have any extension.
-const inputText = readFileSync(INPUT_FILE, "utf8");
-const tmpDir  = mkdtempSync(join(tmpdir(), "builder-tools-"));
-const tmpFile = join(tmpDir, "input.mjs");
-writeFileSync(tmpFile, inputText);
-let BuilderTools;
-try {
-  ({ BuilderTools } = await import(pathToFileURL(tmpFile).href));
-} finally {
-  rmSync(tmpDir, { recursive: true, force: true });
+async function loadBuilderTools(text) {
+  const tmpDir  = mkdtempSync(join(tmpdir(), "builder-tools-"));
+  const tmpFile = join(tmpDir, "input.mjs");
+  writeFileSync(tmpFile, text);
+  try {
+    return (await import(pathToFileURL(tmpFile).href)).BuilderTools;
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
 }
+const inputText = readFileSync(INPUT_FILE, "utf8");
+const BuilderTools = await loadBuilderTools(inputText);
+
+// --releases-from: a previous output whose `releases` (matched by title) are
+// used wherever the input has none, i.e. when rebuilding from upstream
+// tools.js.  This keeps hand-curated `releases` on tools without a repository,
+// and gives tools whose GitHub fetch fails their last known data.
+const RELEASES_FROM = args["releases-from"]
+  ? Object.fromEntries(
+      (await loadBuilderTools(readFileSync(resolve(args["releases-from"]), "utf8")))
+        .filter(t => t.releases)
+        .map(t => [t.title, t.releases])
+    )
+  : {};
+const previousReleases = tool => tool.releases ?? RELEASES_FROM[tool.title] ?? [];
 
 const headerMatch = inputText.match(/^([\s\S]*?)export\s+const\s+BuilderTools\s*=/);
 const HEADER = headerMatch ? headerMatch[1].replace(/\s*$/, "") + "\n\n" : "";
@@ -458,7 +477,9 @@ async function fetchReleases(slug, limit = 10) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
   console.log(`\n🔍 Enriching ${BuilderTools.length} builder-tool entries from ${args.input} (v3)…`);
-  if (!GITHUB_TOKEN)
+  if (args.offline)
+    console.log("   --offline: no GitHub requests, every tool keeps its previous releases.");
+  else if (!GITHUB_TOKEN)
     console.warn("⚠  No GITHUB_TOKEN — rate limit: 60 req/hr. Will be slow.\n");
 
   const enriched = [];
@@ -469,16 +490,17 @@ async function main() {
     console.log(`\n→ ${title}${slug ? ` (${slug})` : " [no repository]"}`);
 
     // Tools without a GitHub repository preserve any manually-curated releases
-    if (!slug) {
-      enriched.push({ ...tool, releases: tool.releases ?? [] });
+    if (!slug || args.offline) {
+      enriched.push({ ...tool, releases: previousReleases(tool) });
       continue;
     }
 
     // On a failed fetch, keep whatever `releases` the input already had, so a
     // refresh run (--input enriched-tools.js) never wipes good data.
     const keepPrevious = reason => {
-      console.warn(`  ✗  ${reason} — keeping previous releases (${(tool.releases ?? []).length})`);
-      enriched.push({ ...tool, releases: tool.releases ?? [] });
+      const releases = previousReleases(tool);
+      console.warn(`  ✗  ${reason} — keeping previous releases (${releases.length})`);
+      enriched.push({ ...tool, releases });
     };
 
     // 1. Core repo metadata
@@ -506,7 +528,7 @@ async function main() {
       await new Promise(r => setTimeout(r, 80));
     }
     console.log(`   ↳  fetched ${textDocs.length} manifest/doc files`);
-    if (textDocs.length === 0 && tool.releases?.length) {
+    if (textDocs.length === 0 && previousReleases(tool).length) {
       keepPrevious("Could not fetch any manifest/doc files");
       continue;
     }

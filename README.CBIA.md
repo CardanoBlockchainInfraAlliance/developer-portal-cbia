@@ -20,11 +20,17 @@ This file includes the documentation for `CBIA Developer Tools Compatibility Mat
 
 - `/src/data/builder-tools/tools-rels-compat.html` -- initial stand-alone PoC
 
-- `/src/pages/tools/index.js` -- minor modifications
+- `/src/pages/tools/index.js` -- "Explore relationships and compatibility" link next to "View all tools alphabetically" (in `AllToolsReveal`)
 
-- `/src/pages/tools/styles.module.css` -- minor modifications
+- `/src/pages/tools/styles.module.css` -- breadcrumb styles (used by the new page) and a gap between the two buttons above
 
 - `/src/pages/tools-rels-compat/index.js` -- new page layout
+
+- `/scripts/analyze-builder-tools.mjs` and `/src/data/builder-tools/enriched-tools.js` -- see *Data enriching* below
+
+- `package.json` -- `enrich-tools` script
+
+The tree's category colours and legend (`CATEGORY_COLORS`, `BUILDER_TOOLS_CATS`, `UTILITIES_CATS` in `/src/components/BuilderToolsTree/index.js`) are hardcoded. When upstream adds a category to `tags.js`, add it there too, or its tools show a grey dot and are hidden while all category filters are on.
 
 ## Data enriching
 
@@ -77,8 +83,12 @@ npm run enrich-tools        # or: yarn enrich-tools
 **Rebuild from the upstream list** (after merging upstream changes to `tools.js`, e.g. new or edited tools):
 
 ```bash
-npm run enrich-tools -- -i src/data/builder-tools/tools.js
+npm run enrich-tools -- -i src/data/builder-tools/tools.js -r src/data/builder-tools/enriched-tools.js
 ```
+
+`-r` carries over the current `releases` (matched by title) for tools without a `repository` and for tools whose GitHub fetch fails, so hand-curated entries aren't lost.
+
+**Without GitHub** (e.g. right after merging upstream, before setting a token): add `--offline` to the rebuild command. The tool list and fields come from `tools.js`, every tool keeps its `releases` from the `-r` file, and new tools start with none until the next online run.
 
 **Standalone** (same thing, without the npm shortcut):
 
@@ -96,6 +106,8 @@ A run takes several minutes (it pauses between requests and waits out GitHub rat
 |---|---|---|
 | `-i`, `--input <file>` | `tools.js` (in the current directory) | The builder-tools file to read. **Always pass it from the repo root**, since there is no `tools.js` there. Choosing the input is what picks the mode: `tools.js` starts from the upstream list; `enriched-tools.js` refreshes a previous output. |
 | `-o`, `--out <basename>` | `enriched-tools` (in the current directory) | Output path **without extension**; the script writes `<basename>.js` and `<basename>.json`. Point it at `src/data/builder-tools/enriched-tools` to update what the site uses, or elsewhere (e.g. `/tmp/enriched-tools`) for a trial run that leaves the repo untouched. |
+| `-r`, `--releases-from <file>` | | A previous output whose `releases` (matched by title) are used for any tool the input has none for: tools without a `repository`, tools whose GitHub fetch fails, and every tool with `--offline`. Meant for rebuilding from `tools.js`; in refresh mode the input already has them. |
+| `--offline` | | Make no GitHub requests: only re-read the input (and `-r` file) and rewrite the output. |
 | `-t`, `--token <PAT>` | `$GITHUB_TOKEN` | GitHub token. Prefer the environment variable (see step 2). |
 | `-h`, `--help` | | Print usage and exit. |
 
@@ -109,4 +121,4 @@ The output is written in the same format as `tools.js` (same comment header, sam
 - Tools with no `repository` keep their existing `releases` (so hand-curated entries survive).
 - If GitHub can't be reached for a tool (metadata, releases list, or all manifest files fail), that tool's previous `releases` are kept instead of being emptied.
 
-Refresh mode only knows about the tools already in `enriched-tools.js`. To pick up tools added or edited upstream in `tools.js`, use the *rebuild from upstream* command. Nothing is lost by doing so, since `releases` comes from GitHub on every run either way (except hand-curated `releases` on tools with no repository, which only exist in `enriched-tools.js`).
+Refresh mode only knows about the tools already in `enriched-tools.js`. To pick up tools added or edited upstream in `tools.js`, use the *rebuild from upstream* command. Nothing is lost by doing so: `releases` comes from GitHub on every run either way, and `-r` brings over the hand-curated `releases` on tools with no repository (e.g. Maestro), which only exist in `enriched-tools.js`. A tool renamed upstream doesn't match by title, so check its `releases` in the diff.
