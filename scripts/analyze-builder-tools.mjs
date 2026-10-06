@@ -37,9 +37,8 @@
  *       traits: ["conway", "babbage", "cip30"]
  *     },
  *     {
- *       version: "6.8.0",
- *       dependencies: ["cardano-node"],
- *       traits: ["babbage"]
+ *       version: "6.8.0",                        ← older releases: no deps
+ *       traits: ["babbage"]                      ← from release notes only
  *     }
  *   ]
  * }
@@ -51,7 +50,7 @@
  * No npm install needed — uses only Node.js 18+ built-ins.
  */
 
-import { writeFileSync, readFileSync, mkdtempSync } from "fs";
+import { writeFileSync, readFileSync, mkdtempSync, rmSync } from "fs";
 import { parseArgs } from "util";
 import { pathToFileURL } from "url";
 import { resolve, join } from "path";
@@ -85,9 +84,15 @@ const INPUT_FILE   = resolve(args.input);
 // choke on `export`.  Copy the text to a temp `.mjs` file and import that, so
 // the input file can have any extension.
 const inputText = readFileSync(INPUT_FILE, "utf8");
-const tmpFile = join(mkdtempSync(join(tmpdir(), "builder-tools-")), "input.mjs");
+const tmpDir  = mkdtempSync(join(tmpdir(), "builder-tools-"));
+const tmpFile = join(tmpDir, "input.mjs");
 writeFileSync(tmpFile, inputText);
-const { BuilderTools } = await import(pathToFileURL(tmpFile).href);
+let BuilderTools;
+try {
+  ({ BuilderTools } = await import(pathToFileURL(tmpFile).href));
+} finally {
+  rmSync(tmpDir, { recursive: true, force: true });
+}
 
 const headerMatch = inputText.match(/^([\s\S]*?)export\s+const\s+BuilderTools\s*=/);
 const HEADER = headerMatch ? headerMatch[1].replace(/\s*$/, "") + "\n\n" : "";
@@ -136,6 +141,17 @@ const slugToTitle = Object.fromEntries(
 );
 const allSlugs = Object.keys(slugToTitle);
 
+// One regex per slug, matching `owner/repo` as a whole: not preceded by a
+// character that could extend the owner, not followed by one that could extend
+// the repo name (so "MeshJS/mesh" doesn't match "MeshJS/mesh-contracts"), but
+// allowing a trailing ".git" or sentence-ending ".".  Case-insensitive, since
+// GitHub slugs are.
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const slugRegexes = allSlugs.map(slug => {
+  const [owner, repo] = slug.split("/").map(escapeRe);
+  return [slug, new RegExp(`(?<![\\w.-])${owner}[/\\\\]${repo}(?![\\w-]|\\.(?!git\\b)\\w)`, "i")];
+});
+
 // ─── GitHub API helpers ───────────────────────────────────────────────────────
 const GH_API = "https://api.github.com";
 const headers = {
@@ -145,14 +161,28 @@ const headers = {
   ...(GITHUB_TOKEN ? { Authorization: `Bearer ${GITHUB_TOKEN}` } : {}),
 };
 
+// How long to wait before retrying a rate-limited response, or null if the
+// response isn't a rate limit.  GitHub signals its primary limit with
+// `x-ratelimit-remaining: 0` (+ `x-ratelimit-reset`) and its secondary limit
+// with `retry-after`, on either 403 or 429.  A 403 without those headers is a
+// plain "forbidden" and retrying won't help.
+function rateLimitWait(res) {
+  if (res.status !== 403 && res.status !== 429) return null;
+  const retryAfter = res.headers.get("retry-after");
+  if (retryAfter) return Number(retryAfter) * 1000 + 1000;
+  const reset = res.headers.get("x-ratelimit-reset");
+  if (res.headers.get("x-ratelimit-remaining") === "0" && reset)
+    return Math.max(0, Number(reset) * 1000 - Date.now()) + 2000;
+  return res.status === 429 ? 60_000 : null;
+}
+
 async function ghFetch(path, { silent = false } = {}) {
   const url = path.startsWith("http") ? path : `${GH_API}${path}`;
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(url, { headers });
     if (res.status === 200) return res.json();
-    if (res.status === 403 || res.status === 429) {
-      const reset = res.headers.get("x-ratelimit-reset");
-      const wait  = reset ? Math.max(0, Number(reset) * 1000 - Date.now()) + 2000 : 60_000;
+    const wait = rateLimitWait(res);
+    if (wait !== null) {
       if (!silent) console.warn(`  ⚠  Rate-limited — waiting ${Math.ceil(wait / 1000)}s…`);
       await new Promise(r => setTimeout(r, wait));
     } else if (res.status === 404) {
@@ -167,34 +197,66 @@ async function ghFetch(path, { silent = false } = {}) {
 }
 
 async function fetchRaw(slug, filePath, branch) {
-  try {
-    const res = await fetch(
-      `https://raw.githubusercontent.com/${slug}/${branch}/${filePath}`,
-      { headers }
-    );
-    if (res.ok) return await res.text();
-  } catch { /* ignore */ }
+  const url = `https://raw.githubusercontent.com/${slug}/${branch}/${filePath}`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(url, { headers });
+      if (res.ok) return await res.text();
+      const wait = rateLimitWait(res);
+      if (wait === null) return null;
+      console.warn(`  ⚠  Rate-limited on raw files — waiting ${Math.ceil(wait / 1000)}s…`);
+      await new Promise(r => setTimeout(r, wait));
+    } catch {
+      return null;
+    }
+  }
   return null;
 }
 
 // ─── Monorepo sub-manifest discovery ─────────────────────────────────────────
+const ROOT_MANIFESTS = new Set([
+  "package.json", "cabal.project", "stack.yaml", "Cargo.toml",
+  "go.mod", "pom.xml", "build.gradle", "build.gradle.kts",
+  "requirements.txt", "pyproject.toml",
+  "pnpm-lock.yaml",   // richer dep info than package.json in pnpm monorepos
+  "README.md",
+]);
+const SUB_DIRS = ["packages", "subprojects", "modules", "libs", "projects", "apps", "integrations"];
+const SUB_RE = new RegExp(
+  `^(${SUB_DIRS.join("|")})\\/[^/]+\\/(package\\.json|build\\.gradle(?:\\.kts)?|pom\\.xml|Cargo\\.toml)$`
+);
+// Sub-package manifests are fetched from raw.githubusercontent.com, which
+// doesn't count against the API rate limit, but each one still costs a request.
+const MAX_SUB_MANIFESTS = 40;
+
+// Returns root manifests first, then up to MAX_SUB_MANIFESTS sub-package ones,
+// so a large monorepo can't crowd out the root files.
 async function discoverManifestPaths(slug, branch) {
   const tree = await ghFetch(`/repos/${slug}/git/trees/${branch}?recursive=1`, { silent: true });
   if (!tree?.tree) return [];
 
-  const ROOT = new Set([
-    "package.json", "cabal.project", "stack.yaml", "Cargo.toml",
-    "go.mod", "pom.xml", "build.gradle", "build.gradle.kts",
-    "requirements.txt", "pyproject.toml",
-    "pnpm-lock.yaml",   // richer dep info than package.json in pnpm monorepos
-    "README.md",
-  ]);
-  const SUB_RE = /^(packages|subprojects|modules|libs|projects|apps|integrations)\/[^/]+\/(package\.json|build\.gradle(?:\.kts)?|pom\.xml|Cargo\.toml)$/;
+  let paths = tree.tree.filter(n => n.type === "blob").map(n => n.path);
 
-  return tree.tree
-    .filter(n => n.type === "blob")
-    .map(n => n.path)
-    .filter(p => ROOT.has(p) || SUB_RE.test(p));
+  if (tree.truncated) {
+    // The recursive listing hit GitHub's size limit and may be missing files.
+    // Rebuild it from the root level plus a recursive listing of each
+    // monorepo directory, which are much smaller.
+    const rootTree = await ghFetch(`/repos/${slug}/git/trees/${branch}`, { silent: true });
+    const rootEntries = rootTree?.tree ?? [];
+    paths = rootEntries.filter(n => n.type === "blob").map(n => n.path);
+    for (const dir of rootEntries.filter(n => n.type === "tree" && SUB_DIRS.includes(n.path))) {
+      const sub = await ghFetch(`/repos/${slug}/git/trees/${dir.sha}?recursive=1`, { silent: true });
+      for (const n of sub?.tree ?? []) {
+        if (n.type === "blob") paths.push(`${dir.path}/${n.path}`);
+      }
+    }
+  }
+
+  const root = paths.filter(p => ROOT_MANIFESTS.has(p));
+  const sub  = paths.filter(p => SUB_RE.test(p));
+  if (sub.length > MAX_SUB_MANIFESTS)
+    console.warn(`   ⚠  ${sub.length} sub-package manifests, reading the first ${MAX_SUB_MANIFESTS}`);
+  return [...root, ...sub.slice(0, MAX_SUB_MANIFESTS)];
 }
 
 // ─── Ecosystem-aware dependency matching ─────────────────────────────────────
@@ -301,9 +363,8 @@ function extractDepsFromTexts(textDocs, selfSlug) {
     const target   = isReadme ? soft : hard;
 
     // GitHub URL slug match — works across all ecosystems as a fallback
-    for (const slug of allSlugs) {
-      if (slug === selfSlug) continue;
-      if (new RegExp(slug.replace("/", "[/\\\\]"), "i").test(text)) target.add(slug);
+    for (const [slug, re] of slugRegexes) {
+      if (slug !== selfSlug && re.test(text)) target.add(slug);
     }
 
     if (isReadme) continue;
@@ -437,9 +498,9 @@ async function main() {
     const manifestPaths = await discoverManifestPaths(slug, branch);
     if (!manifestPaths.some(p => /readme/i.test(p))) manifestPaths.push("README.md");
 
-    // 4. Fetch manifest text (cap at 25 files to avoid rate-limit blowout)
+    // 4. Fetch manifest text
     const textDocs = [];
-    for (const path of manifestPaths.slice(0, 25)) {
+    for (const path of manifestPaths) {
       const text = await fetchRaw(slug, path, branch);
       if (text) textDocs.push({ source: path, text });
       await new Promise(r => setTimeout(r, 80));
@@ -516,14 +577,14 @@ async function main() {
             traits:        latestTraits,
           };
         } else {
-          // Prior releases: minimal shape — version, deps (same as latest, we
-          // can't easily retrieve old lockfiles), and traits from release notes.
+          // Prior releases: minimal shape — version and traits from release
+          // notes.  No dependencies: they'd need that release's manifests, and
+          // copying the latest ones would present a guess as data.
           return {
             version:      rel.version,
             tag:          rel.tag,
             prerelease:   rel.prerelease || undefined,
             publishedAt:  rel.publishedAt,
-            dependencies: latestDeps, // best approximation without checkout
             traits:       releaseTraits,
           };
         }
@@ -535,7 +596,6 @@ async function main() {
       Object.entries(r).filter(([, v]) => v !== undefined && v !== null)
     ));
 
-    const latest = releases.find(r => r.latest);
     console.log(`   ✓  ${releases.length} release(s) | era: ${latestEraStr} | deps: ${latestDeps.join(", ") || "none"}`);
 
     enriched.push({ ...tool, releases });

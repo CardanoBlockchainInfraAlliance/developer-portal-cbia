@@ -34,6 +34,12 @@ This file includes the documentation for `CBIA Developer Tools Compatibility Mat
 - Output: `/src/data/builder-tools/enriched-tools.js`, imported by `/src/components/BuilderToolsTree`, plus an `enriched-tools.json` copy of the same data (not used by the site; useful only for human data review)
 - No `npm install` needed, only Node.js 18+
 
+### 0. Script overview
+
+- **Script:** the input file is imported through a temporary `.mjs` copy (deleted afterwards), so it can keep its `.js` extension. The input's comment header and "ADD YOUR BUILDER TOOL ABOVE THIS LINE" marker are carried over to the output, and only `releases` is regenerated. A tool keeps its previous `releases` when it has no `repository`, or when fetching its GitHub metadata, releases list or manifest files fails.
+- **Dependency detection:** for each tool, the script reads the root manifests (`package.json`, `cabal.project`, `Cargo.toml`, `go.mod`, `pom.xml`, Gradle files, `pyproject.toml`, `requirements.txt`, `pnpm-lock.yaml`), the monorepo sub-package manifests under `packages/`, `modules/`, `libs/` etc., and the `README.md`. In manifests, it looks for other listed tools by GitHub slug (`owner/repo`) and by package name, using per-ecosystem lookup tables (npm, Go, Maven, Rust crates, Haskell, Python) near the top of the script. Matches there become `dependencies`. A tool that is only mentioned in the README becomes a `softReference` instead.
+- **Releases:** up to the 10 most recent GitHub releases are listed, or a single synthetic `tip` entry when the repo has no formal releases. Only the latest entry carries the repo-level data (stars, forks, open issues, license, archived, last commit, Cardano era, `dependencies`, `softReferences`) and traits detected from the current manifests and README. Older entries only have version, tag, date, and traits detected from that release's notes. Their dependencies aren't recorded, since that would require reading old manifests.
+
 ### 1. Create a GitHub token
 
 The script only reads public repository data. Without a token, GitHub allows 60 API requests per hour, and a full run needs around 4 per tool (about 350 for the current list), so in practice a token is required. With a token the limit is 5000 per hour.
