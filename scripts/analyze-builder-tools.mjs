@@ -45,16 +45,19 @@
  *
  * Usage:
  *   GITHUB_TOKEN=ghp_xxx node scripts/analyze-builder-tools.mjs [--input tools.js] [--out enriched-tools]
- *     [--releases-from enriched-tools.js] [--offline]
+ *     [--releases-from enriched-tools.js] [--offline] [--overrides <file>]
  *   (see README.CBIA.md for the `yarn enrich-tools` / `npm run enrich-tools` shortcut)
+ *
+ * Hand-curated corrections live in src/data/builder-tools/enriched-overrides.js
+ * and are applied to each tool's latest release at the end of every run.
  *
  * No npm install needed — uses only Node.js 18+ built-ins.
  */
 
-import { writeFileSync, readFileSync, mkdtempSync, rmSync } from "fs";
+import { writeFileSync, readFileSync, mkdtempSync, rmSync, existsSync } from "fs";
 import { parseArgs } from "util";
-import { pathToFileURL } from "url";
-import { resolve, join } from "path";
+import { pathToFileURL, fileURLToPath } from "url";
+import { resolve, join, dirname } from "path";
 import { tmpdir } from "os";
 
 const { values: args } = parseArgs({
@@ -64,12 +67,13 @@ const { values: args } = parseArgs({
     input: { type: "string", short: "i", default: "tools.js" },
     "releases-from": { type: "string", short: "r" },
     offline: { type: "boolean" },
+    overrides: { type: "string" },
     help:  { type: "boolean", short: "h" },
   },
 });
 if (args.help) {
   console.log("Usage: node analyze-builder-tools.mjs [--token <PAT>] [--input <file>] [--out <basename>]\n" +
-              "         [--releases-from <file>] [--offline]");
+              "         [--releases-from <file>] [--offline] [--overrides <file>]");
   process.exit(0);
 }
 
@@ -87,16 +91,17 @@ const INPUT_FILE   = resolve(args.input);
 // "type": "module", so Node would treat a literal `.js` import as CommonJS and
 // choke on `export`.  Copy the text to a temp `.mjs` file and import that, so
 // the input file can have any extension.
-async function loadBuilderTools(text) {
+async function loadModule(text) {
   const tmpDir  = mkdtempSync(join(tmpdir(), "builder-tools-"));
   const tmpFile = join(tmpDir, "input.mjs");
   writeFileSync(tmpFile, text);
   try {
-    return (await import(pathToFileURL(tmpFile).href)).BuilderTools;
+    return await import(pathToFileURL(tmpFile).href);
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
 }
+const loadBuilderTools = async text => (await loadModule(text)).BuilderTools;
 const inputText = readFileSync(INPUT_FILE, "utf8");
 const BuilderTools = await loadBuilderTools(inputText);
 
@@ -112,6 +117,50 @@ const RELEASES_FROM = args["releases-from"]
     )
   : {};
 const previousReleases = tool => tool.releases ?? RELEASES_FROM[tool.title] ?? [];
+
+// --overrides: hand-curated corrections, keyed by tool title (see the comment
+// at the top of that file for the format).  Defaults to the repo's
+// enriched-overrides.js, found relative to this script; skipped if missing.
+const OVERRIDES_FILE = args.overrides
+  ? resolve(args.overrides)
+  : resolve(dirname(fileURLToPath(import.meta.url)), "../src/data/builder-tools/enriched-overrides.js");
+const OVERRIDES = existsSync(OVERRIDES_FILE)
+  ? (await loadModule(readFileSync(OVERRIDES_FILE, "utf8"))).EnrichedOverrides ?? {}
+  : {};
+
+// Applies a tool's override to its latest release (creating a bare one if the
+// tool has none), and records the touched fields in `overridden`.  A field set
+// to a value replaces the detected one; a field set to { add, remove } edits a
+// detected list.  Applying the same override twice gives the same result, so
+// re-feeding an output that already has it applied is safe.
+function applyOverrides(tool) {
+  const ov = OVERRIDES[tool.title];
+  if (!ov) return tool;
+  const releases = (tool.releases ?? []).map(r => ({ ...r }));
+  let latest = releases.find(r => r.latest);
+  if (!latest) releases.unshift(latest = { latest: true });
+
+  const touched = [];
+  for (const [field, val] of Object.entries(ov)) {
+    if (field === "note") continue;
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      const list = new Set(latest[field] ?? []);
+      for (const x of val.remove ?? []) list.delete(x);
+      for (const x of val.add ?? []) list.add(x);
+      latest[field] = [...list];
+    } else {
+      latest[field] = val;
+    }
+    touched.push(field);
+  }
+  // A curated hard dependency shouldn't also show as a soft reference
+  if (latest.softReferences && latest.dependencies) {
+    latest.softReferences = latest.softReferences.filter(t => !latest.dependencies.includes(t));
+    if (!latest.softReferences.length) delete latest.softReferences;
+  }
+  latest.overridden = touched;
+  return { ...tool, releases };
+}
 
 const headerMatch = inputText.match(/^([\s\S]*?)export\s+const\s+BuilderTools\s*=/);
 const HEADER = headerMatch ? headerMatch[1].replace(/\s*$/, "") + "\n\n" : "";
@@ -155,9 +204,16 @@ function repoSlug(tool) {
   const m = tool.repository.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/);
   return m ? m[1] : null;
 }
-const slugToTitle = Object.fromEntries(
-  BuilderTools.filter(t => t.repository).map(t => [repoSlug(t), t.title])
-);
+// Several tools can share a repo (cardano-node + cardano-testnet; cardano-api
+// + cardano-rpc + cardano-wasm).  A match on that repo is credited to the tool
+// named after it, else to the first one listed, never to whichever comes last.
+const slugToTitle = {};
+for (const t of BuilderTools) {
+  const slug = repoSlug(t);
+  if (!slug) continue;
+  const named = t.title.toLowerCase() === slug.split("/")[1].toLowerCase();
+  if (!(slug in slugToTitle) || named) slugToTitle[slug] = t.title;
+}
 const allSlugs = Object.keys(slugToTitle);
 
 // One regex per slug, matching `owner/repo` as a whole: not preceded by a
@@ -200,6 +256,12 @@ async function ghFetch(path, { silent = false } = {}) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await fetch(url, { headers });
     if (res.status === 200) return res.json();
+    if (res.status === 401) {
+      // Bad token: every request would fail the same way, so stop before
+      // writing an output that silently kept every tool's old data.
+      console.error(`\n✗  HTTP 401 from GitHub: GITHUB_TOKEN is invalid, expired or revoked. Nothing was written.`);
+      process.exit(1);
+    }
     const wait = rateLimitWait(res);
     if (wait !== null) {
       if (!silent) console.warn(`  ⚠  Rate-limited — waiting ${Math.ceil(wait / 1000)}s…`);
@@ -287,6 +349,8 @@ const NPM_TO_SLUG = {
   "@dcspark/cardano-multiplatform-lib-nodejs":  "dcSpark/cardano-multiplatform-lib",
   "@dcspark/cardano-multiplatform-lib-browser": "dcSpark/cardano-multiplatform-lib",
   "@harmoniclabs/cardano-multiplatform-lib":    "dcSpark/cardano-multiplatform-lib",
+  "@anastasia-labs/cardano-multiplatform-lib-nodejs":  "dcSpark/cardano-multiplatform-lib",
+  "@anastasia-labs/cardano-multiplatform-lib-browser": "dcSpark/cardano-multiplatform-lib",
   "@cardano-sdk/core":                          "input-output-hk/cardano-js-sdk",
   "@cardano-sdk/crypto":                        "input-output-hk/cardano-js-sdk",
   "@cardano-sdk/tx-construction":               "input-output-hk/cardano-js-sdk",
@@ -296,6 +360,8 @@ const NPM_TO_SLUG = {
   "@sidan-lab/sidan-csl-rs-nodejs":            "sidan-lab/whisky",
   "@sidan-lab/sidan-csl-rs-browser":           "sidan-lab/whisky",
   "@sidan-lab/whisky":                         "sidan-lab/whisky",
+  "@sidan-lab/whisky-js-nodejs":               "sidan-lab/whisky",
+  "@sidan-lab/whisky-js-browser":              "sidan-lab/whisky",
   "@harmoniclabs/pebble":                      "HarmonicLabs/pebble",
   "@harmoniclabs/plutus-data":                 "HarmonicLabs/pebble",
   "@harmoniclabs/cardano-ledger-ts":           "HarmonicLabs/pebble",
@@ -348,7 +414,7 @@ const CRATE_TO_SLUG = {
   "whisky":            "sidan-lab/whisky",
 };
 const HASKELL_PKG_TO_SLUG = {
-  "cardano-api":            "IntersectMBO/cardano-node",
+  "cardano-api":            "IntersectMBO/cardano-api",
   "cardano-node":           "IntersectMBO/cardano-node",
   "cardano-ledger-core":    "IntersectMBO/cardano-node",
   "cardano-ledger-conway":  "IntersectMBO/cardano-node",
@@ -572,11 +638,15 @@ async function main() {
         traits:        latestTraits,
       }];
     } else {
-      // Build an entry per GitHub release.
-      // For releases after the first, we can only infer traits from the
+      // Build an entry per GitHub release, newest first.
+      // For releases other than the latest, we can only infer traits from the
       // release body (changelog) — we don't re-fetch old manifests.
+      // "Latest" is the newest stable release, as on GitHub; only if every
+      // listed release is a prerelease does the newest prerelease count.
+      const stableIdx = ghReleases.findIndex(r => !r.prerelease);
+      const latestIdx = stableIdx === -1 ? 0 : stableIdx;
       releases = ghReleases.map((rel, idx) => {
-        const isLatest = idx === 0;
+        const isLatest = idx === latestIdx;
         const releaseTraits = detectTraits([rel.body]);
 
         if (isLatest) {
@@ -624,6 +694,21 @@ async function main() {
     await new Promise(r => setTimeout(r, 400));
   }
 
+  // ─── Hand-curated overrides ───────────────────────────────────────────────
+  const titles = new Set(enriched.map(t => t.title));
+  for (const [title, ov] of Object.entries(OVERRIDES)) {
+    if (!titles.has(title)) console.warn(`  ⚠  Override for unknown tool "${title}" — ignored`);
+    for (const field of ["dependencies", "softReferences"]) {
+      const v = ov[field];
+      const named = Array.isArray(v) ? v : [...(v?.add ?? []), ...(v?.remove ?? [])];
+      for (const t of named)
+        if (!titles.has(t)) console.warn(`  ⚠  Override for "${title}": ${field} names unknown tool "${t}"`);
+    }
+  }
+  for (let i = 0; i < enriched.length; i++) enriched[i] = applyOverrides(enriched[i]);
+  const applied = enriched.filter(t => OVERRIDES[t.title]).map(t => t.title);
+  if (applied.length) console.log(`\n✎  Overrides applied (${OVERRIDES_FILE}): ${applied.join(", ")}`);
+
   // ─── Output: enriched tools array as JS export (mirrors original format) ──
   // Reuse the original file's comment header and trailing marker so the result
   // is a drop-in replacement, and serialize with unquoted keys via toJS().
@@ -638,7 +723,7 @@ async function main() {
   console.log(`✅  JSON → ${OUT_BASE}.json`);
 
   // ─── Summary ──────────────────────────────────────────────────────────────
-  const withDeps    = enriched.filter(t => t.releases?.[0]?.dependencies?.length > 0).length;
+  const withDeps    = enriched.filter(t => t.releases?.find(r => r.latest)?.dependencies?.length > 0).length;
   const withRels    = enriched.filter(t => t.releases?.length > 0).length;
   console.log(`\nDone. ${enriched.length} tools enriched, ${withRels} with releases, ${withDeps} with detected dependencies.\n`);
 }

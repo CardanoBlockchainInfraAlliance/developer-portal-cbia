@@ -37,6 +37,7 @@ The tree's category colours and legend (`CATEGORY_COLORS`, `BUILDER_TOOLS_CATS`,
 `scripts/analyze-builder-tools.mjs` reads the portal's builder-tools list and writes a copy of it in which every tool gets a `releases` array (versions, stars, license, Cardano era, dependencies on other listed tools, soft references, CIP/era traits), pulled from GitHub.
 
 - Input: `/src/data/builder-tools/tools.js` (upstream list) or `/src/data/builder-tools/enriched-tools.js` (a previous run's output)
+- Manual corrections: `/src/data/builder-tools/enriched-overrides.js` (see *Manual overrides* below)
 - Output: `/src/data/builder-tools/enriched-tools.js`, imported by `/src/components/BuilderToolsTree`, plus an `enriched-tools.json` copy of the same data (not used by the site; useful only for human data review)
 - No `npm install` needed, only Node.js 18+
 
@@ -44,7 +45,8 @@ The tree's category colours and legend (`CATEGORY_COLORS`, `BUILDER_TOOLS_CATS`,
 
 - **Script:** the input file is imported through a temporary `.mjs` copy (deleted afterwards), so it can keep its `.js` extension. The input's comment header and "ADD YOUR BUILDER TOOL ABOVE THIS LINE" marker are carried over to the output, and only `releases` is regenerated. A tool keeps its previous `releases` when it has no `repository`, or when fetching its GitHub metadata, releases list or manifest files fails.
 - **Dependency detection:** for each tool, the script reads the root manifests (`package.json`, `cabal.project`, `Cargo.toml`, `go.mod`, `pom.xml`, Gradle files, `pyproject.toml`, `requirements.txt`, `pnpm-lock.yaml`), the monorepo sub-package manifests under `packages/`, `modules/`, `libs/` etc., and the `README.md`. In manifests, it looks for other listed tools by GitHub slug (`owner/repo`) and by package name, using per-ecosystem lookup tables (npm, Go, Maven, Rust crates, Haskell, Python) near the top of the script. Matches there become `dependencies`. A tool that is only mentioned in the README becomes a `softReference` instead.
-- **Releases:** up to the 10 most recent GitHub releases are listed, or a single synthetic `tip` entry when the repo has no formal releases. Only the latest entry carries the repo-level data (stars, forks, open issues, license, archived, last commit, Cardano era, `dependencies`, `softReferences`) and traits detected from the current manifests and README. Older entries only have version, tag, date, and traits detected from that release's notes. Their dependencies aren't recorded, since that would require reading old manifests.
+- **Releases:** up to the 10 most recent GitHub releases are listed, or a single synthetic `tip` entry when the repo has no formal releases. The entry marked `latest` is the newest stable release, as on GitHub (the newest prerelease only if all listed releases are prereleases). Only the latest entry carries the repo-level data (stars, forks, open issues, license, archived, last commit, Cardano era, `dependencies`, `softReferences`) and traits detected from the current manifests and README. Older entries only have version, tag, date, and traits detected from that release's notes. Their dependencies aren't recorded, since that would require reading old manifests.
+- **Shared repos:** when several tools share one repository (cardano-node and cardano-testnet; cardano-api, cardano-rpc and cardano-wasm), they all get that repo's releases, and a dependency on the repo is credited to the tool named after it.
 
 ### 1. Create a GitHub token
 
@@ -107,11 +109,29 @@ A run takes several minutes (it pauses between requests and waits out GitHub rat
 | `-i`, `--input <file>` | `tools.js` (in the current directory) | The builder-tools file to read. **Always pass it from the repo root**, since there is no `tools.js` there. Choosing the input is what picks the mode: `tools.js` starts from the upstream list; `enriched-tools.js` refreshes a previous output. |
 | `-o`, `--out <basename>` | `enriched-tools` (in the current directory) | Output path **without extension**; the script writes `<basename>.js` and `<basename>.json`. Point it at `src/data/builder-tools/enriched-tools` to update what the site uses, or elsewhere (e.g. `/tmp/enriched-tools`) for a trial run that leaves the repo untouched. |
 | `-r`, `--releases-from <file>` | | A previous output whose `releases` (matched by title) are used for any tool the input has none for: tools without a `repository`, tools whose GitHub fetch fails, and every tool with `--offline`. Meant for rebuilding from `tools.js`; in refresh mode the input already has them. |
-| `--offline` | | Make no GitHub requests: only re-read the input (and `-r` file) and rewrite the output. |
+| `--offline` | | Make no GitHub requests: only re-read the input (and `-r` file), apply the overrides and rewrite the output. |
+| `--overrides <file>` | `src/data/builder-tools/enriched-overrides.js` (found relative to the script) | Manual corrections file; skipped if it doesn't exist. |
 | `-t`, `--token <PAT>` | `$GITHUB_TOKEN` | GitHub token. Prefer the environment variable (see step 2). |
 | `-h`, `--help` | | Print usage and exit. |
 
 With `npm run`, arguments after `--` are appended to the script's own, and a repeated flag overrides the earlier one, which is how `-- -i ...tools.js` switches the input.
+
+### Manual overrides
+
+Some things can't be detected from GitHub, e.g. a repo that doesn't name the stack it runs on (Koios), a README that no longer mentions an era (Marlowe, Scalus), or a tool with no public repository (Maestro). `/src/data/builder-tools/enriched-overrides.js` holds those corrections, keyed by tool title. They're applied to the latest release at the end of every run, so refreshes and rebuilds never undo them:
+
+```js
+Koios: {
+  note: "Why this override exists (not written to the output)",
+  dependencies: { add: ["cardano-node", "Ogmios"] },   // edit a detected list (add and/or remove)
+  cardanoEra: "conway",                                // or replace a value outright
+},
+```
+
+- Dependency names are tool titles. The script warns about an override for an unknown tool, or one naming an unknown tool.
+- Overridden fields are listed in that release's `overridden` array, so curated data can be told apart from detected data.
+- After editing the file, apply it without calling GitHub: `yarn enrich-tools --offline`.
+- Removing an override takes effect on the next online run, which recomputes the field from GitHub.
 
 ### Re-feeding the output (refresh mode)
 
