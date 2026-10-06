@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cardano Builder Tools · Dependency Tree</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:           #0d1117;
+    --bg-elev:      #11161f;
+    --surface:      #1c2333;
+    --line:         #2a3550;          /* muted indigo tree lines */
+    --line-glow:    #3d4f80;
+    --accent:       #4da6ff;          /* lightened Cardano blue */
+    --accent-dim:   #2a73c2;
+    --text:         #e6edf3;          /* warm off-white */
+    --text-dim:     #8b98ad;
+    --toggle:       #5f7099;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* ---------- Header chrome ---------- */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(13, 17, 23, 0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+    padding: 18px 28px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-right: auto;
+  }
+  .brand h1 {
+    font-size: 16.5px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: .2px;
+  }
+  .brand .sub {
+    font-size: 13.8px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .controls { display: flex; gap: 10px; }
+
+  button.ctl {
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  button.ctl:hover {
+    border-color: var(--accent-dim);
+    color: var(--accent);
+  }
+  button.ctl:active { background: #0b0f16; }
+
+  /* ---------- View toggle ---------- */
+  .view-toggle {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .view-toggle input[type="radio"] { display: none; }
+  .view-toggle label {
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-dim);
+    background: var(--bg-elev);
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+    border-right: 1px solid var(--line);
+    user-select: none;
+  }
+  .view-toggle label:last-of-type { border-right: none; }
+  .view-toggle input[type="radio"]:checked + label {
+    background: var(--accent-dim);
+    color: #fff;
+  }
+  .view-toggle label:hover { color: var(--accent); }
+
+  /* ---------- Tool count ---------- */
+  .soft-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+    transition: color .15s ease;
+  }
+  .soft-toggle:hover { color: var(--accent); }
+  .soft-toggle input[type="checkbox"] {
+    accent-color: var(--accent-dim);
+    width: 13px;
+    height: 13px;
+    cursor: pointer;
+  }
+  .soft-toggle:has(input:checked) { color: var(--accent); }
+
+  .tool-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .tool-count strong { color: var(--text); font-weight: 600; }
+
+  /* ---------- Tree ---------- */
+  main {
+    padding: 26px 28px 120px;
+    max-width: 1100px;
+  }
+
+  #tree { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; }
+
+  .node { position: relative; }
+
+  /* the row you click */
+  .node-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 6px;
+    border-radius: 5px;
+    cursor: default;
+    user-select: none;
+    transition: background .12s ease;
+    position: relative;
+  }
+  .node-row.interactive { cursor: pointer; }
+  .node-row.interactive:hover { background: rgba(77, 166, 255, 0.07); }
+
+  .toggle {
+    width: 14px;
+    flex: 0 0 14px;
+    color: var(--toggle);
+    font-size: 11px;
+    text-align: center;
+    transition: transform .2s ease, color .15s ease;
+  }
+  .node-row.interactive:hover .toggle { color: var(--accent); }
+  .node.collapsed > .node-row .toggle { transform: rotate(-90deg); }
+  .toggle.leaf { color: transparent; }
+
+  .dot {
+    width: 7px; height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    box-shadow: 0 0 6px -1px currentColor;
+  }
+
+  .label { color: var(--text); white-space: nowrap; }
+  .node-row.interactive:hover .label { color: var(--accent); }
+
+  .cycle-mark {
+    color: var(--text-dim);
+    font-size: 11px;
+    margin-left: 4px;
+    opacity: .7;
+  }
+
+  /* children container: grid 0fr/1fr slide */
+  .children {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows .25s ease;
+    margin-left: 14px;
+    padding-left: 16px;
+    position: relative;
+  }
+  .children > .inner { overflow: hidden; }
+
+  .node.collapsed > .children { grid-template-rows: 0fr; }
+
+  /* vertical connector line, animated draw */
+  .children::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 9px;
+    width: 1px;
+    background: linear-gradient(var(--line) 70%, var(--line-glow));
+    transform-origin: top;
+    transform: scaleY(1);
+    transition: transform .25s ease;
+  }
+  .node.collapsed > .children::before { transform: scaleY(0); }
+
+  /* horizontal tick from vertical line to each node */
+  .children > .inner > .node > .node-row::before {
+    content: "";
+    position: absolute;
+    left: -16px;
+    top: 50%;
+    width: 13px;
+    height: 1px;
+    background: var(--line);
+  }
+
+  footer {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 10;
+    background: rgba(13, 17, 23, 0.96);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line);
+    padding: 10px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 4px 12px;
+    flex-wrap: wrap;
+  }
+  .legend-group-label {
+    font-size: 15.2px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    min-width: 128px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    padding: 2px 7px;
+    font-size: 12.7px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    transition: border-color .15s, background .15s, opacity .15s;
+    user-select: none;
+  }
+  .legend-item:hover { border-color: var(--line-glow); background: rgba(77,166,255,.07); }
+  .legend-item.dimmed { opacity: 0.3; }
+  .legend-item .dot { box-shadow: none; }
+
+  .compat-badge {
+    display: inline-block;
+    font-size: 12.4px;
+    font-family: 'JetBrains Mono', monospace;
+    border-radius: 4px;
+    padding: 0 5px;
+    margin-left: 6px;
+    line-height: 22px;
+    vertical-align: middle;
+    flex-shrink: 0;
+    font-weight: 600;
+    letter-spacing: .3px;
+    cursor: pointer;
+    position: relative;
+  }
+  .compat-ok {
+    color: #3fb950;
+    border: 1px solid rgba(63, 185, 80, 0.4);
+    background: rgba(63, 185, 80, 0.07);
+  }
+  .compat-not {
+    color: #ff7b72;
+    border: 1px solid rgba(255, 123, 114, 0.4);
+    background: rgba(255, 123, 114, 0.07);
+  }
+
+  #compat-popover {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 13px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    line-height: 1.7;
+    box-shadow: 0 4px 20px rgba(0,0,0,.45);
+    max-width: 280px;
+    pointer-events: none;
+  }
+  #compat-popover.visible {
+    display: block;
+    pointer-events: auto;
+  }
+  #compat-popover .pop-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    white-space: nowrap;
+  }
+  #compat-popover .pop-tool { color: var(--text); }
+  #compat-popover .pop-era  { color: var(--text-dim); }
+  #compat-popover .pop-title {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  #compat-popover .pop-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 6px 0;
+  }
+
+  .err {
+    font-family: 'JetBrains Mono', monospace;
+    color: #ff7b72;
+    padding: 20px;
+    line-height: 1.6;
+  }
+  .err code { color: var(--accent); }
+
+  /* ---------- Tool tooltip ---------- */
+  #tool-tooltip {
+    display: none;
+    position: fixed;
+    z-index: 1002;
+    background: var(--surface);
+    border: 1px solid var(--line-glow);
+    border-radius: 7px;
+    padding: 9px 13px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    line-height: 1.55;
+    box-shadow: 0 6px 24px rgba(0,0,0,.5);
+    max-width: 340px;
+    pointer-events: none;
+  }
+  #tool-tooltip.visible { display: block; }
+  #tool-tooltip .tip-by {
+    font-size: 12.65px;
+    color: #f0f6fc;
+    margin-bottom: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: .2px;
+  }
+  #tool-tooltip .tip-desc { color: var(--text-dim); }
+</style>
+</head>
+<body>
+  <div id="compat-popover"></div>
+  <div id="tool-tooltip"></div>
+  <header>
+    <div class="brand">
+      <h1>Relationships and compatibility</h1>
+      <span class="sub" id="viewSub">dependency tree · titles only · tools that nobody else depends on</span>
+    </div>
+    <div class="view-toggle">
+      <input type="radio" name="direction" id="dirDeps" value="deps">
+      <label for="dirDeps">Dependencies</label>
+      <input type="radio" name="direction" id="dirDependents" value="dependents" checked>
+      <label for="dirDependents">Dependents</label>
+    </div>
+    <div class="view-toggle">
+      <input type="radio" name="view" id="viewConsumers" value="consumers" checked>
+      <label for="viewConsumers">Top-level</label>
+      <input type="radio" name="view" id="viewAll" value="all">
+      <label for="viewAll">All tools</label>
+    </div>
+    <label class="soft-toggle" title="Include soft references (integrations, optional companions) as dependency edges">
+      <input type="checkbox" id="softRefs" checked>
+      Soft refs
+    </label>
+    <div class="controls">
+      <button class="ctl" id="expandAll">Expand all</button>
+      <button class="ctl" id="collapseAll">Collapse all</button>
+    </div>
+    <span class="tool-count" id="toolCount"></span>
+  </header>
+
+  <main>
+    <div id="tree"></div>
+  </main>
+
+  <footer id="legend"></footer>
+
+  <script type="module">
+    import { BuilderTools } from './enriched-tools.js';
+
+    // ---- category -> colour ----------------------------------------------
+    const CATEGORY_COLORS = {
+      'node':            '#4da6ff',
+      'node-access':     '#56c2ff',
+      'sdk':             '#a371f7',
+      'wallet':          '#ffb454',
+      'indexer':         '#3fb950',
+      'integration':     '#39c5cf',
+      'operations':      '#e3b341',
+      'smart-contracts': '#f778ba',
+      'api':             '#79c0ff',
+      'dev-env':         '#7ee787',
+      'governance':      '#d2a8ff',
+      'testing':         '#ff7b72',
+    };
+    const colorFor = c => CATEGORY_COLORS[c] || '#8b98ad';
+
+    // ---- tool tooltip ----------------------------------------------------
+    const toolTip = document.getElementById('tool-tooltip');
+    let tipTouchTimer = null;
+
+    function makerOf(tool) {
+      if (tool.repository) {
+        const m = tool.repository.match(/github\.com\/([^/]+)/);
+        if (m) return m[1];
+      }
+      if (tool.website) {
+        try { return new URL(tool.website).hostname.replace(/^www\./, ''); } catch {}
+      }
+      return null;
+    }
+
+    function showToolTip(row, tool) {
+      const maker = makerOf(tool);
+      const desc = tool.description || '';
+      if (!maker && !desc) return;
+      toolTip.innerHTML = '';
+      if (maker) {
+        const byEl = document.createElement('div');
+        byEl.className = 'tip-by';
+        byEl.textContent = `By ${maker}`;
+        toolTip.appendChild(byEl);
+      }
+      if (desc) {
+        const descEl = document.createElement('div');
+        descEl.className = 'tip-desc';
+        descEl.textContent = desc;
+        toolTip.appendChild(descEl);
+      }
+      const r = row.getBoundingClientRect();
+      const tipW = 340;
+      let left = r.left;
+      if (left + tipW > window.innerWidth - 8) left = window.innerWidth - tipW - 8;
+      toolTip.style.left = Math.max(8, left) + 'px';
+      toolTip.style.top  = Math.min(r.bottom + 6, window.innerHeight - 80) + 'px';
+      toolTip.classList.add('visible');
+    }
+
+    function hideToolTip() {
+      toolTip.classList.remove('visible');
+      clearTimeout(tipTouchTimer);
+      clearTimeout(tipHoverTimer);
+    }
+
+    let tipHoverTimer = null;
+
+    function attachTooltip(row, tool) {
+      row.addEventListener('mouseenter', () => {
+        clearTimeout(tipHoverTimer);
+        tipHoverTimer = setTimeout(() => showToolTip(row, tool), 1500);
+      });
+      row.addEventListener('mouseleave', hideToolTip);
+      // mobile: show immediately on tap, auto-dismiss after 3 s
+      row.addEventListener('touchend', () => {
+        clearTimeout(tipTouchTimer);
+        showToolTip(row, tool);
+        tipTouchTimer = setTimeout(hideToolTip, 3000);
+      });
+    }
+
+    document.addEventListener('scroll', hideToolTip, true);
+
+    // ---- build index + dependency edges ----------------------------------
+    const byTitle = new Map(BuilderTools.map(t => [t.title, t]));
+
+    const latestOf = t => t.releases?.find(r => r.latest) || t.releases?.[0] || {};
+    const hardDepsOf = t => latestOf(t).dependencies || [];
+    const softDepsOf = t => latestOf(t).softReferences || [];
+
+    // ---- era compatibility -----------------------------------------------
+    const effectiveEra = t => {
+      const era = latestOf(t).cardanoEra;
+      return (era && era !== 'unknown') ? era : null;
+    };
+
+    // ---- compat popover -----------------------------------------------------
+    const popover = document.getElementById('compat-popover');
+
+    function showCompatPopover(badge, parentName, parentEra, childName, childEra) {
+      const ok = parentEra === childEra;
+      popover.innerHTML = `
+        <div class="pop-title">era compatibility</div>
+        <div class="pop-row"><span class="pop-tool">${parentName}</span><span class="pop-era">${parentEra}</span></div>
+        <hr class="pop-divider">
+        <div class="pop-row"><span class="pop-tool">${childName}</span><span class="pop-era">${ok ? childEra : '<span style="color:#ff7b72">' + childEra + '</span>'}</span></div>
+      `;
+      const r = badge.getBoundingClientRect();
+      const pw = popover.offsetWidth || 240;
+      let left = r.right + 8;
+      if (left + pw > window.innerWidth - 8) left = r.left - pw - 8;
+      popover.style.left = Math.max(8, left) + 'px';
+      popover.style.top  = Math.max(8, r.top - 4) + 'px';
+      popover.classList.add('visible');
+    }
+
+    document.addEventListener('click', e => {
+      if (!e.target.classList.contains('compat-badge')) {
+        popover.classList.remove('visible');
+      }
+    });
+
+    function makeCompatBadge(parentEra, childEra, parentName, childName) {
+      if (!parentEra || !childEra) return null;
+      const ok = parentEra === childEra;
+      const badge = document.createElement('span');
+      badge.className = `compat-badge ${ok ? 'compat-ok' : 'compat-not'}`;
+      badge.textContent = ok ? 'OK' : '≠';
+      badge.addEventListener('click', e => {
+        e.stopPropagation();
+        showCompatPopover(badge, parentName, parentEra, childName, childEra);
+      });
+      return badge;
+    }
+
+    const sorted = [...BuilderTools].sort((a, b) => a.title.localeCompare(b.title));
+    const allRoots = sorted;
+
+    // depsOf and all derived sets are recomputed in renderTree() based on the soft-refs toggle
+    let depsOf = hardDepsOf;
+    let dependedUpon = new Set();
+    let consumerRoots = [];
+    let reverseDeps = new Map();
+    let foundationRoots = [];
+
+    function rebuildEdges(includeSoft) {
+      depsOf = includeSoft
+        ? t => [...new Set([...hardDepsOf(t), ...softDepsOf(t)])]
+        : hardDepsOf;
+
+      dependedUpon = new Set();
+      for (const t of BuilderTools) for (const d of depsOf(t)) dependedUpon.add(d);
+
+      consumerRoots = sorted.filter(t => !dependedUpon.has(t.title));
+
+      reverseDeps = new Map();
+      for (const t of BuilderTools) {
+        for (const dep of depsOf(t)) {
+          if (!reverseDeps.has(dep)) reverseDeps.set(dep, new Set());
+          reverseDeps.get(dep).add(t);
+        }
+      }
+
+      foundationRoots = sorted.filter(t => depsOf(t).length === 0 && reverseDeps.has(t.title));
+    }
+
+    rebuildEdges(false);
+
+    // ---- category definitions + filter state --------------------------------
+    const BUILDER_TOOLS_CATS = [
+      { key: 'sdk',             label: 'SDKs & Libraries' },
+      { key: 'indexer',         label: 'Indexers & Data' },
+      { key: 'wallet',          label: 'Wallets & Connectivity' },
+      { key: 'smart-contracts', label: 'Smart Contracts' },
+      { key: 'node-access',     label: 'Node Access & RPC' },
+      { key: 'api',             label: 'APIs & Providers' },
+      { key: 'node',            label: 'Nodes & Clients' },
+    ];
+    const UTILITIES_CATS = [
+      { key: 'dev-env',     label: 'Developer Environments' },
+      { key: 'testing',     label: 'Testing & Debugging' },
+      { key: 'operations',  label: 'Node Operations' },
+      { key: 'governance',  label: 'Governance' },
+      { key: 'integration', label: 'Integration & Middleware' },
+    ];
+    const ALL_LEGEND_CATS = [...BUILDER_TOOLS_CATS, ...UTILITIES_CATS];
+    const allCatKeys = new Set(ALL_LEGEND_CATS.map(c => c.key));
+    let activeCategories = new Set(allCatKeys);
+
+    // ---- render -----------------------------------------------------------
+    const treeEl = document.getElementById('tree');
+    const toolCountEl = document.getElementById('toolCount');
+    const viewSub = document.getElementById('viewSub');
+    const VIEW_SUBS = {
+      deps_consumers:       'Dependency tree [what each depends on] · tools nothing else depends on',
+      deps_all:             'Dependency tree [what each depends on] · all tools',
+      dependents_consumers: 'Dependents tree [what depends on each] · foundation tools',
+      dependents_all:       'Dependents tree [what depends on each] · all tools',
+    };
+
+    function buildNode(tool, ancestors, parentEra = null, parentName = null) {
+      const node = document.createElement('div');
+      node.className = 'node';
+
+      const row = document.createElement('div');
+      row.className = 'node-row';
+
+      const toggle = document.createElement('span');
+      toggle.className = 'toggle';
+
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.color = colorFor(tool.category);
+      dot.style.background = colorFor(tool.category);
+      dot.title = tool.category;
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = tool.title;
+
+      row.append(toggle, dot, label);
+
+      const badge = makeCompatBadge(parentEra, effectiveEra(tool), parentName, tool.title);
+      if (badge) row.appendChild(badge);
+
+      attachTooltip(row, tool);
+      node.appendChild(row);
+
+      // cycle guard: don't recurse into an ancestor
+      const isCycle = ancestors.has(tool.title);
+      const childTitles = isCycle
+        ? []
+        : depsOf(tool).map(d => byTitle.get(d)).filter(Boolean);
+
+      if (isCycle && depsOf(tool).length) {
+        const cm = document.createElement('span');
+        cm.className = 'cycle-mark';
+        cm.textContent = '↺';
+        cm.title = 'already shown higher in this branch';
+        row.appendChild(cm);
+      }
+
+      if (childTitles.length) {
+        toggle.textContent = '▾';
+        row.classList.add('interactive');
+
+        const childrenWrap = document.createElement('div');
+        childrenWrap.className = 'children';
+        const inner = document.createElement('div');
+        inner.className = 'inner';
+        childrenWrap.appendChild(inner);
+
+        const nextAncestors = new Set(ancestors).add(tool.title);
+        const toolEra = effectiveEra(tool);
+        childTitles
+          .sort((a, b) => a.title.localeCompare(b.title))
+          .forEach(child => inner.appendChild(buildNode(child, nextAncestors, toolEra, tool.title)));
+
+        node.appendChild(childrenWrap);
+
+        row.addEventListener('click', e => {
+          if (e.ctrlKey || e.metaKey) {
+            node.querySelectorAll('.node').forEach(n => n.classList.remove('collapsed'));
+            node.classList.remove('collapsed');
+          } else {
+            node.classList.toggle('collapsed');
+          }
+        });
+      } else {
+        toggle.classList.add('leaf');
+        toggle.textContent = '•';
+      }
+
+      return node;
+    }
+
+    function buildNodeReverse(tool, ancestors, parentEra = null, parentName = null) {
+      const node = document.createElement('div');
+      node.className = 'node';
+
+      const row = document.createElement('div');
+      row.className = 'node-row';
+
+      const toggle = document.createElement('span');
+      toggle.className = 'toggle';
+
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.color = colorFor(tool.category);
+      dot.style.background = colorFor(tool.category);
+      dot.title = tool.category;
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = tool.title;
+
+      row.append(toggle, dot, label);
+
+      const badge = makeCompatBadge(parentEra, effectiveEra(tool), parentName, tool.title);
+      if (badge) row.appendChild(badge);
+
+      attachTooltip(row, tool);
+      node.appendChild(row);
+
+      const isCycle = ancestors.has(tool.title);
+      const childTools = isCycle ? [] : [...(reverseDeps.get(tool.title) ?? [])];
+
+      if (isCycle && reverseDeps.has(tool.title)) {
+        const cm = document.createElement('span');
+        cm.className = 'cycle-mark';
+        cm.textContent = '↺';
+        cm.title = 'already shown higher in this branch';
+        row.appendChild(cm);
+      }
+
+      if (childTools.length) {
+        toggle.textContent = '▾';
+        row.classList.add('interactive');
+
+        const childrenWrap = document.createElement('div');
+        childrenWrap.className = 'children';
+        const inner = document.createElement('div');
+        inner.className = 'inner';
+        childrenWrap.appendChild(inner);
+
+        const nextAncestors = new Set(ancestors).add(tool.title);
+        const toolEra = effectiveEra(tool);
+        childTools
+          .sort((a, b) => a.title.localeCompare(b.title))
+          .forEach(child => inner.appendChild(buildNodeReverse(child, nextAncestors, toolEra, tool.title)));
+
+        node.appendChild(childrenWrap);
+
+        row.addEventListener('click', e => {
+          if (e.ctrlKey || e.metaKey) {
+            node.querySelectorAll('.node').forEach(n => n.classList.remove('collapsed'));
+            node.classList.remove('collapsed');
+          } else {
+            node.classList.toggle('collapsed');
+          }
+        });
+      } else {
+        toggle.classList.add('leaf');
+        toggle.textContent = '•';
+      }
+
+      return node;
+    }
+
+    function renderTree() {
+      rebuildEdges(document.getElementById('softRefs').checked);
+      const dir = document.querySelector('input[name="direction"]:checked').value;
+      const view = document.querySelector('input[name="view"]:checked').value;
+      const isDep = dir === 'deps';
+      const isAll = view === 'all';
+      const roots = isDep
+        ? (isAll ? allRoots : consumerRoots)
+        : (isAll ? allRoots : foundationRoots);
+      const buildFn = isDep ? buildNode : buildNodeReverse;
+
+      const filteredRoots = activeCategories.size === allCatKeys.size
+        ? roots
+        : roots.filter(r => activeCategories.has(r.category));
+
+      treeEl.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      filteredRoots.forEach(r => frag.appendChild(buildFn(r, new Set())));
+      treeEl.appendChild(frag);
+      const knownEraCount = BuilderTools.filter(t => effectiveEra(t)).length;
+      toolCountEl.innerHTML =
+        `<strong>${BuilderTools.length}</strong> tools total · <strong>${filteredRoots.length}</strong> shown at root · <strong>${knownEraCount}</strong> known era`;
+      viewSub.textContent = VIEW_SUBS[`${dir}_${view}`];
+    }
+
+    renderTree();
+
+    // ---- view/direction/soft-refs toggles ------------------------------------
+    document.querySelectorAll('input[name="view"], input[name="direction"]').forEach(radio =>
+      radio.addEventListener('change', renderTree));
+    document.getElementById('softRefs').addEventListener('change', renderTree);
+
+    // ---- global controls --------------------------------------------------
+    const allNodesWithChildren = () =>
+      treeEl.querySelectorAll('.node:has(> .children)');
+
+    allNodesWithChildren().forEach(n => n.classList.add('collapsed'));
+
+    document.getElementById('expandAll').addEventListener('click', () =>
+      allNodesWithChildren().forEach(n => n.classList.remove('collapsed')));
+
+    document.getElementById('collapseAll').addEventListener('click', () =>
+      allNodesWithChildren().forEach(n => n.classList.add('collapsed')));
+
+    // ---- legend -----------------------------------------------------------
+    const legend = document.getElementById('legend');
+
+    function updateLegendVisuals() {
+      const allActive = activeCategories.size === allCatKeys.size;
+      legend.querySelectorAll('.legend-item[data-cat]').forEach(item => {
+        item.classList.toggle('dimmed', !allActive && !activeCategories.has(item.dataset.cat));
+      });
+    }
+
+    function buildLegendRow(groupLabel, cats) {
+      const row = document.createElement('div');
+      row.className = 'legend-row';
+
+      const lbl = document.createElement('span');
+      lbl.className = 'legend-group-label';
+      lbl.textContent = groupLabel;
+      row.appendChild(lbl);
+
+      cats.forEach(({ key, label }) => {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.dataset.cat = key;
+
+        const d = document.createElement('span');
+        d.className = 'dot';
+        d.style.background = colorFor(key);
+
+        const t = document.createElement('span');
+        t.textContent = label;
+
+        item.append(d, t);
+
+        item.addEventListener('click', e => {
+          if (e.ctrlKey || e.metaKey) {
+            if (activeCategories.has(key)) {
+              activeCategories.delete(key);
+              if (activeCategories.size === 0) activeCategories = new Set(allCatKeys);
+            } else {
+              activeCategories.add(key);
+            }
+          } else {
+            if (activeCategories.size === 1 && activeCategories.has(key)) {
+              activeCategories = new Set(allCatKeys);
+            } else {
+              activeCategories = new Set([key]);
+            }
+          }
+          updateLegendVisuals();
+          renderTree();
+        });
+
+        row.appendChild(item);
+      });
+
+      return row;
+    }
+
+    legend.appendChild(buildLegendRow('Builder Tools:', BUILDER_TOOLS_CATS));
+    legend.appendChild(buildLegendRow('Utilities & more:', UTILITIES_CATS));
+  </script>
+
+  <noscript>
+    <p class="err">This view requires JavaScript to load <code>enriched-tools.js</code>.</p>
+  </noscript>
+</body>
+</html>

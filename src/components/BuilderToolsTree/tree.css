@@ -1,0 +1,375 @@
+/* Scoped styles for the BuilderToolsTree component.
+   All selectors are prefixed with .btt-wrap so they don't leak into Docusaurus globals.
+   CSS custom properties are scoped to .btt-wrap instead of :root.
+   The fixed header/legend from the standalone HTML is converted to sticky so it
+   works correctly inside the portal page flow. */
+
+.btt-wrap {
+  --bg:           #0d1117;
+  --bg-elev:      #11161f;
+  --surface:      #1c2333;
+  --line:         #2a3550;
+  --line-glow:    #3d4f80;
+  --accent:       #4da6ff;
+  --accent-dim:   #2a73c2;
+  --text:         #e6edf3;
+  --text-dim:     #8b98ad;
+  --toggle:       #5f7099;
+
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  border-radius: 8px;
+}
+
+/* ---------- Header chrome ---------- */
+.btt-header {
+  position: sticky;
+  top: var(--ifm-navbar-height, 60px);
+  z-index: 10;
+  background: rgba(13, 17, 23, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.btt-wrap .brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-right: auto;
+}
+.btt-wrap .brand h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: .2px;
+  color: var(--text);
+}
+.btt-wrap .brand .sub {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.btt-wrap .controls { display: flex; gap: 10px; }
+
+.btt-wrap button.ctl {
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.btt-wrap button.ctl:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+.btt-wrap button.ctl:active { background: #0b0f16; }
+
+/* ---------- View toggle ---------- */
+.btt-wrap .view-toggle {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.btt-wrap .view-toggle input[type="radio"] { display: none; }
+.btt-wrap .view-toggle label {
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  padding: 7px 14px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+  border-right: 1px solid var(--line);
+  user-select: none;
+}
+.btt-wrap .view-toggle label:last-of-type { border-right: none; }
+.btt-wrap .view-toggle input[type="radio"]:checked + label {
+  background: var(--accent-dim);
+  color: #fff;
+}
+.btt-wrap .view-toggle label:hover { color: var(--accent); }
+
+/* ---------- Soft-refs toggle + count ---------- */
+.btt-wrap .soft-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: color .15s ease;
+}
+.btt-wrap .soft-toggle:hover { color: var(--accent); }
+.btt-wrap .soft-toggle input[type="checkbox"] {
+  accent-color: var(--accent-dim);
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+}
+.btt-wrap .soft-toggle:has(input:checked) { color: var(--accent); }
+
+.btt-wrap .tool-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.btt-wrap .tool-count strong { color: var(--text); font-weight: 600; }
+
+/* ---------- Tree main area ---------- */
+.btt-main {
+  padding: 26px 20px 48px;
+  max-width: 1100px;
+  min-height: 500px;
+  background: var(--bg);
+}
+
+.btt-wrap #tree { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; }
+
+.btt-wrap .node { position: relative; }
+
+.btt-wrap .node-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  cursor: default;
+  user-select: none;
+  transition: background .12s ease;
+  position: relative;
+}
+.btt-wrap .node-row.interactive { cursor: pointer; }
+.btt-wrap .node-row.interactive:hover { background: rgba(77, 166, 255, 0.07); }
+
+.btt-wrap .toggle {
+  width: 14px;
+  flex: 0 0 14px;
+  color: var(--toggle);
+  font-size: 11px;
+  text-align: center;
+  transition: transform .2s ease, color .15s ease;
+}
+.btt-wrap .node-row.interactive:hover .toggle { color: var(--accent); }
+.btt-wrap .node.collapsed > .node-row .toggle { transform: rotate(-90deg); }
+.btt-wrap .toggle.leaf { color: transparent; }
+
+.btt-wrap .dot {
+  width: 7px; height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px -1px currentColor;
+}
+
+.btt-wrap .label { color: var(--text); white-space: nowrap; }
+.btt-wrap .node-row.interactive:hover .label { color: var(--accent); }
+
+.btt-wrap .cycle-mark {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-left: 4px;
+  opacity: .7;
+}
+
+/* children container: grid 0fr/1fr slide */
+.btt-wrap .children {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows .25s ease;
+  margin-left: 14px;
+  padding-left: 16px;
+  position: relative;
+}
+.btt-wrap .children > .inner { overflow: hidden; }
+
+.btt-wrap .node.collapsed > .children { grid-template-rows: 0fr; }
+
+/* vertical connector line */
+.btt-wrap .children::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 9px;
+  width: 1px;
+  background: linear-gradient(var(--line) 70%, var(--line-glow));
+  transform-origin: top;
+  transform: scaleY(1);
+  transition: transform .25s ease;
+}
+.btt-wrap .node.collapsed > .children::before { transform: scaleY(0); }
+
+/* horizontal tick from vertical line to each node */
+.btt-wrap .children > .inner > .node > .node-row::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  width: 13px;
+  height: 1px;
+  background: var(--line);
+}
+
+/* ---------- Legend ---------- */
+.btt-legend {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  background: rgba(13, 17, 23, 0.96);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line);
+  padding: 10px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+.btt-wrap .legend-row {
+  display: flex;
+  align-items: center;
+  gap: 3px 7px;
+  flex-wrap: wrap;
+}
+.btt-wrap .legend-group-label {
+  font-size: 15.2px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  min-width: 108px;
+}
+.btt-wrap .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 12.7px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: border-color .15s, background .15s, opacity .15s;
+  user-select: none;
+}
+.btt-wrap .legend-item:hover { border-color: var(--line-glow); background: rgba(77,166,255,.07); }
+.btt-wrap .legend-item.dimmed { opacity: 0.3; }
+.btt-wrap .legend-item .dot { box-shadow: none; }
+
+/* ---------- Compat badge ---------- */
+.btt-wrap .compat-badge {
+  display: inline-block;
+  font-size: 12.4px;
+  font-family: 'JetBrains Mono', monospace;
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-left: 6px;
+  line-height: 22px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  font-weight: 600;
+  letter-spacing: .3px;
+  cursor: pointer;
+  position: relative;
+}
+.btt-wrap .compat-ok {
+  color: #3fb950;
+  border: 1px solid rgba(63, 185, 80, 0.4);
+  background: rgba(63, 185, 80, 0.07);
+}
+.btt-wrap .compat-not {
+  color: #ff7b72;
+  border: 1px solid rgba(255, 123, 114, 0.4);
+  background: rgba(255, 123, 114, 0.07);
+}
+
+/* ---------- Compat popover ---------- */
+.btt-wrap #compat-popover {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 13px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+  box-shadow: 0 4px 20px rgba(0,0,0,.45);
+  max-width: 280px;
+  pointer-events: none;
+}
+.btt-wrap #compat-popover.visible {
+  display: block;
+  pointer-events: auto;
+}
+.btt-wrap #compat-popover .pop-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  white-space: nowrap;
+}
+.btt-wrap #compat-popover .pop-tool { color: var(--text); }
+.btt-wrap #compat-popover .pop-era  { color: var(--text-dim); }
+.btt-wrap #compat-popover .pop-title {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.btt-wrap #compat-popover .pop-divider {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 6px 0;
+}
+
+/* ---------- Tool tooltip ---------- */
+.btt-wrap #tool-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 1002;
+  background: var(--surface);
+  border: 1px solid var(--line-glow);
+  border-radius: 7px;
+  padding: 9px 13px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12.5px;
+  line-height: 1.55;
+  box-shadow: 0 6px 24px rgba(0,0,0,.5);
+  max-width: 340px;
+  pointer-events: none;
+}
+.btt-wrap #tool-tooltip.visible { display: block; }
+.btt-wrap #tool-tooltip .tip-by {
+  font-size: 12.65px;
+  color: #f0f6fc;
+  margin-bottom: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: .2px;
+}
+.btt-wrap #tool-tooltip .tip-desc { color: var(--text-dim); }
+
+/* ---------- Error state ---------- */
+.btt-wrap .err {
+  font-family: 'JetBrains Mono', monospace;
+  color: #ff7b72;
+  padding: 20px;
+  line-height: 1.6;
+}
+.btt-wrap .err code { color: var(--accent); }
