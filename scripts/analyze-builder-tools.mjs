@@ -135,7 +135,8 @@ const OVERRIDES = existsSync(OVERRIDES_FILE)
 // re-feeding an output that already has it applied is safe.
 function applyOverrides(tool) {
   const ov = OVERRIDES[tool.title];
-  if (!ov) return tool;
+  // A note-only entry is a flag for reviewers and changes nothing
+  if (!ov || Object.keys(ov).every(k => k === "note")) return tool;
   const releases = (tool.releases ?? []).map(r => ({ ...r }));
   let latest = releases.find(r => r.latest);
   if (!latest) releases.unshift(latest = { latest: true });
@@ -706,8 +707,11 @@ async function main() {
     }
   }
   for (let i = 0; i < enriched.length; i++) enriched[i] = applyOverrides(enriched[i]);
-  const applied = enriched.filter(t => OVERRIDES[t.title]).map(t => t.title);
+  const isNoteOnly = ov => Object.keys(ov).every(k => k === "note");
+  const applied = enriched.filter(t => OVERRIDES[t.title] && !isNoteOnly(OVERRIDES[t.title])).map(t => t.title);
+  const flagged = enriched.filter(t => OVERRIDES[t.title] && isNoteOnly(OVERRIDES[t.title])).map(t => t.title);
   if (applied.length) console.log(`\n✎  Overrides applied (${OVERRIDES_FILE}): ${applied.join(", ")}`);
+  if (flagged.length) console.log(`✎  Flagged for review (note only, no change): ${flagged.join(", ")}`);
 
   // ─── Output: enriched tools array as JS export (mirrors original format) ──
   // Reuse the original file's comment header and trailing marker so the result
