@@ -9,8 +9,9 @@
  *
  * The input array AND its surrounding comment header/footer are read from
  * tools.js (or whatever --input points at), so the output is a true drop-in
- * replacement: rename enriched-tools.js → tools.js and feed it back in to
- * refresh the `releases` data while preserving every other field and comment.
+ * replacement: feed enriched-tools.js back in as --input to refresh the
+ * `releases` data while preserving every other field and comment.  If GitHub
+ * can't be reached for a tool, its previous `releases` are kept unchanged.
  *
  * Output shape (one entry):
  * {
@@ -44,7 +45,8 @@
  * }
  *
  * Usage:
- *   GITHUB_TOKEN=ghp_xxx node analyze-builder-tools.mjs [--input tools.js] [--out enriched-tools]
+ *   GITHUB_TOKEN=ghp_xxx node scripts/analyze-builder-tools.mjs [--input tools.js] [--out enriched-tools]
+ *   (see README.CBIA.md for the `yarn enrich-tools` / `npm run enrich-tools` shortcut)
  *
  * No npm install needed — uses only Node.js 18+ built-ins.
  */
@@ -382,7 +384,7 @@ function latestEra(traits) {
 // ─── GitHub releases fetching ─────────────────────────────────────────────────
 async function fetchReleases(slug, limit = 10) {
   const data = await ghFetch(`/repos/${slug}/releases?per_page=${limit}`, { silent: true });
-  if (!Array.isArray(data)) return [];
+  if (!Array.isArray(data)) return null; // fetch failed (distinct from "no releases")
   return data.map(r => ({
     version:     r.tag_name?.replace(/^v/, "") ?? r.name,
     tag:         r.tag_name,
@@ -411,11 +413,17 @@ async function main() {
       continue;
     }
 
+    // On a failed fetch, keep whatever `releases` the input already had, so a
+    // refresh run (--input enriched-tools.js) never wipes good data.
+    const keepPrevious = reason => {
+      console.warn(`  ✗  ${reason} — keeping previous releases (${(tool.releases ?? []).length})`);
+      enriched.push({ ...tool, releases: tool.releases ?? [] });
+    };
+
     // 1. Core repo metadata
     const meta = await ghFetch(`/repos/${slug}`);
     if (!meta) {
-      console.warn(`  ✗  Could not fetch metadata — skipping`);
-      enriched.push({ ...tool, releases: [] });
+      keepPrevious("Could not fetch metadata");
       continue;
     }
     const branch = meta.default_branch ?? "main";
@@ -437,6 +445,10 @@ async function main() {
       await new Promise(r => setTimeout(r, 80));
     }
     console.log(`   ↳  fetched ${textDocs.length} manifest/doc files`);
+    if (textDocs.length === 0 && tool.releases?.length) {
+      keepPrevious("Could not fetch any manifest/doc files");
+      continue;
+    }
 
     // 5. Dependencies and traits from latest manifests
     const { hard: latestDeps, soft: latestSoft } = extractDepsFromTexts(textDocs, slug);
@@ -446,6 +458,10 @@ async function main() {
 
     // 6. GitHub releases list
     const ghReleases = await fetchReleases(slug, 10);
+    if (ghReleases === null) {
+      keepPrevious("Could not fetch releases list");
+      continue;
+    }
 
     // 7. Build the `releases` array
     //    Latest release = the first entry from GitHub releases (or a synthetic

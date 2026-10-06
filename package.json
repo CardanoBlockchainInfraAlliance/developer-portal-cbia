@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build-stats": "node scripts/generate-stats.js",
+    "enrich-tools": "node scripts/analyze-builder-tools.mjs -i src/data/builder-tools/enriched-tools.js -o src/data/builder-tools/enriched-tools",
     "docusaurus": "docusaurus",
     "start": "yarn build-stats && docusaurus start",
     "build": "yarn build-stats && docusaurus build && node scripts/fix-llms-paths.js",
