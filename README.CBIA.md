@@ -100,7 +100,7 @@ node scripts/analyze-builder-tools.mjs \
   -o src/data/builder-tools/enriched-tools
 ```
 
-A run takes several minutes (it pauses between requests and waits out GitHub rate limits if hit). Review the result with `git diff src/data/builder-tools/enriched-tools.js`; `git checkout` that file to discard it.
+A run takes several minutes (it pauses between requests and waits out GitHub rate limits if hit). Review the result with `git diff src/data/builder-tools/enriched-tools.js`; `git checkout src/data/builder-tools/enriched-tools.*` to discard it. Both output files are tracked, so commit them together to keep the JSON copy in step with the `.js`.
 
 ### Arguments
 
