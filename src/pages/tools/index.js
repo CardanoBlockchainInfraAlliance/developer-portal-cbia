@@ -406,26 +406,34 @@ function AllToolsSection({ tools, sortOption, isUnfiltered, heading, bare = fals
 
 function AllToolsReveal() {
   const [shown, setShown] = useState(false);
-  if (shown) {
-    return (
-      <AllToolsSection
-        tools={null}
-        sortOption={SORT_IDS.ALPHABETICAL}
-        isUnfiltered={true}
-        heading="All tools, A to Z"
-      />
-    );
-  }
   return (
-    <section className={clsx("container", styles.section, styles.allToolsReveal)}>
-      <button
-        type="button"
-        className="button button--outline button--primary"
-        onClick={() => setShown(true)}
-      >
-        {`View all ${SortedTools.length} tools alphabetically`}
-      </button>
-    </section>
+    <>
+      <section className={clsx("container", styles.section, styles.allToolsReveal)}>
+        {!shown && (
+          <button
+            type="button"
+            className="button button--outline button--primary"
+            onClick={() => setShown(true)}
+          >
+            {`View all ${SortedTools.length} tools alphabetically`}
+          </button>
+        )}
+        <Link
+          to="/tools-rels-compat/"
+          className="button button--outline button--secondary"
+        >
+          Explore relationships and compatibility
+        </Link>
+      </section>
+      {shown && (
+        <AllToolsSection
+          tools={null}
+          sortOption={SORT_IDS.ALPHABETICAL}
+          isUnfiltered={true}
+          heading="All tools, A to Z"
+        />
+      )}
+    </>
   );
 }
 

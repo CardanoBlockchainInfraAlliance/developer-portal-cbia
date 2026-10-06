@@ -24,6 +24,7 @@ export default function BuilderToolsTree() {
       "dev-env":         "#7ee787",
       "governance":      "#d2a8ff",
       "testing":         "#ff7b72",
+      "oracle":          "#f0883e",
     };
     const colorFor = c => CATEGORY_COLORS[c] || "#8b98ad";
 
@@ -190,6 +191,7 @@ export default function BuilderToolsTree() {
       { key: "operations",  label: "Node Operations" },
       { key: "governance",  label: "Governance" },
       { key: "integration", label: "Integration & Middleware" },
+      { key: "oracle",      label: "Oracles & Data Feeds" },
     ];
     const ALL_LEGEND_CATS = [...BUILDER_TOOLS_CATS, ...UTILITIES_CATS];
     const allCatKeys = new Set(ALL_LEGEND_CATS.map(c => c.key));

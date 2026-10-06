@@ -3,15 +3,14 @@ import Layout from "@theme/Layout";
 import Link from "@docusaurus/Link";
 import clsx from "clsx";
 
-import SiteHero from "@site/src/components/Layout/SiteHero";
+import SiteHero from "@site/src/components/SiteHero";
 import PageCTA from "@site/src/components/PageCTA";
 import BuilderToolsTree from "@site/src/components/BuilderToolsTree";
 
 import styles from "@site/src/pages/tools/styles.module.css";
 
 const TITLE = "Builder Tools";
-const HERO_DESCRIPTION =
-  "Discover developer tools, SDKs, and libraries for building on Cardano. Smart contracts, transactions, indexing, wallets, and more.";
+const HERO_DESCRIPTION = "Every tool for you to build with Cardano.";
 
 export default function ToolsRelsCompat() {
   return (
@@ -42,9 +41,9 @@ export default function ToolsRelsCompat() {
       <PageCTA
         title="Built a tool for Cardano?"
         description="Add it to this page. The submission process is open and lightweight."
-        href="/docs/contribute/portal-contribute"
-        buttonText="Add your tool"
-        variant="primary"
+        buttons={[
+          { href: "/docs/contribute/portal-contribute", label: "Add your tool" },
+        ]}
       />
     </Layout>
   );

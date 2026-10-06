@@ -1,3 +1,32 @@
+/* CBIA: breadcrumb for /tools-rels-compat/, which reuses this module. */
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  margin-bottom: 1.5rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.breadcrumb a {
+  color: var(--ifm-color-emphasis-700);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  color: var(--ifm-color-primary);
+}
+
+.crumbSep {
+  color: var(--ifm-color-emphasis-400);
+}
+
+.crumbCurrent {
+  color: var(--ifm-color-emphasis-900);
+  font-weight: 500;
+}
+
 /* Browse area: the facet rail beside the controls, intents and primary
    results. The sections below this grid stay full width. */
 .browse {
@@ -152,7 +181,9 @@ html[data-theme="dark"] .sectionTitle.sectionTitleMuted {
 
 .allToolsReveal {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  gap: 1rem;
   margin-top: 1.5rem;
 }
 
