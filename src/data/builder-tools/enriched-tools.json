@@ -28,7 +28,11 @@
         "softReferences": [
           "cardano-node"
         ],
-        "traits": []
+        "traits": [],
+        "conwayReady": true,
+        "overridden": [
+          "conwayReady"
+        ]
       },
       {
         "version": "cardano-cli-11.2.3.0",
@@ -230,7 +234,8 @@
           "alonzo",
           "babbage",
           "conway"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "2026-08-21",
@@ -439,7 +444,8 @@
         ],
         "traits": [
           "conway"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "1.5.1",
@@ -520,7 +526,11 @@
           "cardano-node",
           "Plinth"
         ],
-        "traits": []
+        "traits": [],
+        "conwayReady": true,
+        "overridden": [
+          "conwayReady"
+        ]
       },
       {
         "version": "13.7.1.0",
@@ -688,7 +698,15 @@
       "rest"
     ],
     "maintainerPick": true,
-    "releases": []
+    "releases": [
+      {
+        "latest": true,
+        "conwayReady": true,
+        "overridden": [
+          "conwayReady"
+        ]
+      }
+    ]
   },
   {
     "title": "StakePool Operator Scripts",
@@ -805,6 +823,10 @@
         "traits": [
           "shelley",
           "alonzo"
+        ],
+        "conwayReady": true,
+        "overridden": [
+          "conwayReady"
         ]
       },
       {
@@ -939,7 +961,11 @@
         "softReferences": [
           "cardano-node"
         ],
-        "traits": []
+        "traits": [],
+        "conwayReady": true,
+        "overridden": [
+          "conwayReady"
+        ]
       },
       {
         "version": "6.14.0",
@@ -1498,8 +1524,10 @@
         ],
         "traits": [],
         "overridden": [
-          "dependencies"
-        ]
+          "dependencies",
+          "conwayReady"
+        ],
+        "conwayReady": true
       },
       {
         "version": "1.4.0",
@@ -1598,7 +1626,8 @@
           "alonzo",
           "conway",
           "cip14"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "1.3.0",
@@ -1797,7 +1826,8 @@
         ],
         "traits": [
           "conway"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "2.11",
@@ -2353,7 +2383,8 @@
           "alonzo",
           "babbage",
           "conway"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "0.210.0",
@@ -2453,7 +2484,8 @@
           "byron",
           "shelley",
           "conway"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "0.44.0",
@@ -2698,7 +2730,11 @@
         "dependencies": [
           "Pallas"
         ],
-        "traits": []
+        "traits": [],
+        "conwayReady": true,
+        "overridden": [
+          "conwayReady"
+        ]
       },
       {
         "version": "1.1.23",
@@ -2794,7 +2830,8 @@
           "cip100",
           "cip108",
           "cip119"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "1.34.0",
@@ -3014,7 +3051,8 @@
           "cip30",
           "cip45",
           "cip95"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "cardano-connect-with-wallet-core-v0.2.12",
@@ -3380,7 +3418,8 @@
           "alonzo",
           "babbage",
           "conway"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "2.4.0",
@@ -3820,7 +3859,8 @@
         "dependencies": [],
         "traits": [
           "conway"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "1.3.0-alpha",
@@ -4126,7 +4166,8 @@
         "traits": [
           "shelley",
           "cip129"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "1.1.1",
@@ -4219,7 +4260,8 @@
         "traits": [
           "conway",
           "cip2"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "1.2.0",
@@ -4312,7 +4354,8 @@
         "traits": [
           "conway",
           "cip30"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "@evolution-sdk/evolution@0.5.17",
@@ -4410,8 +4453,10 @@
           "cip57"
         ],
         "overridden": [
-          "cardanoEra"
-        ]
+          "cardanoEra",
+          "conwayReady"
+        ],
+        "conwayReady": true
       },
       {
         "version": "1.1.0",
@@ -4664,7 +4709,8 @@
         ],
         "traits": [
           "conway"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "2.1.2",
@@ -5193,7 +5239,8 @@
         "traits": [
           "byron",
           "conway"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "0.17.1",
@@ -5764,7 +5811,8 @@
           "conway",
           "cip30",
           "cip95"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "1.0.114",
@@ -6165,7 +6213,8 @@
           "byron",
           "conway",
           "cip25"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "2.0.0-alpha.0",
@@ -6341,7 +6390,11 @@
         "archived": false,
         "cardanoEra": "unknown",
         "dependencies": [],
-        "traits": []
+        "traits": [],
+        "conwayReady": true,
+        "overridden": [
+          "conwayReady"
+        ]
       },
       {
         "version": "11.1.2",
@@ -7026,7 +7079,8 @@
           "cip8",
           "cip30",
           "cip95"
-        ]
+        ],
+        "conwayReady": true
       },
       {
         "version": "0.7.0",
@@ -7106,7 +7160,11 @@
           "cardano-cli",
           "cardano-node"
         ],
-        "traits": []
+        "traits": [],
+        "conwayReady": true,
+        "overridden": [
+          "conwayReady"
+        ]
       }
     ]
   },

@@ -67,6 +67,8 @@ export const BuilderTools = [
         dependencies: [],
         softReferences: ["cardano-node"],
         traits: [],
+        conwayReady: true,
+        overridden: ["conwayReady"],
       },
       {
         version: "cardano-cli-11.2.3.0",
@@ -238,6 +240,7 @@ export const BuilderTools = [
         cardanoEra: "conway",
         dependencies: ["cardano-addresses", "cardano-api", "cardano-node", "Plinth"],
         traits: ["byron", "shelley", "allegra", "mary", "alonzo", "babbage", "conway"],
+        conwayReady: true,
       },
       {
         version: "2026-08-21",
@@ -413,6 +416,7 @@ export const BuilderTools = [
         dependencies: [],
         softReferences: ["Yaci Store"],
         traits: ["conway"],
+        conwayReady: true,
       },
       {
         version: "1.5.1",
@@ -483,6 +487,8 @@ export const BuilderTools = [
         cardanoEra: "unknown",
         dependencies: ["cardano-api", "cardano-node", "Plinth"],
         traits: [],
+        conwayReady: true,
+        overridden: ["conwayReady"],
       },
       {
         version: "13.7.1.0",
@@ -638,7 +644,13 @@ export const BuilderTools = [
     category: "api",
     properties: ["rest"],
     maintainerPick: true,
-    releases: [],
+    releases: [
+      {
+        latest: true,
+        conwayReady: true,
+        overridden: ["conwayReady"],
+      },
+    ],
   },
   {
     title: "StakePool Operator Scripts",
@@ -747,6 +759,8 @@ export const BuilderTools = [
         cardanoEra: "alonzo",
         dependencies: [],
         traits: ["shelley", "alonzo"],
+        conwayReady: true,
+        overridden: ["conwayReady"],
       },
       {
         version: "16.0.0",
@@ -859,6 +873,8 @@ export const BuilderTools = [
         dependencies: [],
         softReferences: ["cardano-node"],
         traits: [],
+        conwayReady: true,
+        overridden: ["conwayReady"],
       },
       {
         version: "6.14.0",
@@ -1353,7 +1369,8 @@ export const BuilderTools = [
         cardanoEra: "unknown",
         dependencies: ["cardano-node", "cardano-db-sync", "Ogmios"],
         traits: [],
-        overridden: ["dependencies"],
+        overridden: ["dependencies", "conwayReady"],
+        conwayReady: true,
       },
       {
         version: "1.4.0",
@@ -1437,6 +1454,7 @@ export const BuilderTools = [
         cardanoEra: "conway",
         dependencies: [],
         traits: ["byron", "shelley", "alonzo", "conway", "cip14"],
+        conwayReady: true,
       },
       {
         version: "1.3.0",
@@ -1600,6 +1618,7 @@ export const BuilderTools = [
         dependencies: ["Ogmios", "bech32", "cardano-node"],
         softReferences: ["Adder", "Yaci Store", "Oura", "Scrolls"],
         traits: ["conway"],
+        conwayReady: true,
       },
       {
         version: "2.11",
@@ -2091,6 +2110,7 @@ export const BuilderTools = [
         cardanoEra: "conway",
         dependencies: [],
         traits: ["byron", "shelley", "allegra", "mary", "alonzo", "babbage", "conway"],
+        conwayReady: true,
       },
       {
         version: "0.210.0",
@@ -2173,6 +2193,7 @@ export const BuilderTools = [
         cardanoEra: "conway",
         dependencies: ["gOuroboros"],
         traits: ["byron", "shelley", "conway"],
+        conwayReady: true,
       },
       {
         version: "0.44.0",
@@ -2402,6 +2423,8 @@ export const BuilderTools = [
         cardanoEra: "unknown",
         dependencies: ["Pallas"],
         traits: [],
+        conwayReady: true,
+        overridden: ["conwayReady"],
       },
       {
         version: "1.1.23",
@@ -2485,6 +2508,7 @@ export const BuilderTools = [
         dependencies: [],
         softReferences: ["StakePool Operator Scripts"],
         traits: ["shelley", "conway", "cip8", "cip30", "cip36", "cip100", "cip108", "cip119"],
+        conwayReady: true,
       },
       {
         version: "1.34.0",
@@ -2663,6 +2687,7 @@ export const BuilderTools = [
         cardanoEra: "unknown",
         dependencies: [],
         traits: ["cip8", "cip30", "cip45", "cip95"],
+        conwayReady: true,
       },
       {
         version: "cardano-connect-with-wallet-core-v0.2.12",
@@ -2977,6 +3002,7 @@ export const BuilderTools = [
         cardanoEra: "conway",
         dependencies: ["cardano-api", "cardano-node", "Plinth"],
         traits: ["shelley", "mary", "alonzo", "babbage", "conway"],
+        conwayReady: true,
       },
       {
         version: "2.4.0",
@@ -3391,6 +3417,7 @@ export const BuilderTools = [
         cardanoEra: "conway",
         dependencies: [],
         traits: ["conway"],
+        conwayReady: true,
       },
       {
         version: "1.3.0-alpha",
@@ -3672,6 +3699,7 @@ export const BuilderTools = [
         cardanoEra: "shelley",
         dependencies: ["bech32"],
         traits: ["shelley", "cip129"],
+        conwayReady: true,
       },
       {
         version: "1.1.1",
@@ -3755,6 +3783,7 @@ export const BuilderTools = [
         dependencies: [],
         softReferences: ["Cometa.js"],
         traits: ["conway", "cip2"],
+        conwayReady: true,
       },
       {
         version: "1.2.0",
@@ -3838,6 +3867,7 @@ export const BuilderTools = [
         cardanoEra: "conway",
         dependencies: ["bech32", "Cardano Connect with Wallet", "cardano-multiplatform-lib", "Cardano Peer Connect"],
         traits: ["conway", "cip30"],
+        conwayReady: true,
       },
       {
         version: "@evolution-sdk/evolution@0.5.17",
@@ -3921,7 +3951,8 @@ export const BuilderTools = [
         dependencies: [],
         softReferences: ["Lucid Evolution", "Evolution SDK", "Mesh", "Cardano Client Library", "Yaci DevKit", "Yaci Store"],
         traits: ["cip57"],
-        overridden: ["cardanoEra"],
+        overridden: ["cardanoEra", "conwayReady"],
+        conwayReady: true,
       },
       {
         version: "1.1.0",
@@ -4155,6 +4186,7 @@ export const BuilderTools = [
         cardanoEra: "conway",
         dependencies: ["Bursa", "gOuroboros"],
         traits: ["conway"],
+        conwayReady: true,
       },
       {
         version: "2.1.2",
@@ -4628,6 +4660,7 @@ export const BuilderTools = [
         dependencies: ["gOuroboros"],
         softReferences: ["Dingo"],
         traits: ["byron", "conway"],
+        conwayReady: true,
       },
       {
         version: "0.17.1",
@@ -5144,6 +5177,7 @@ export const BuilderTools = [
         dependencies: [],
         softReferences: ["Cardano-C"],
         traits: ["conway", "cip30", "cip95"],
+        conwayReady: true,
       },
       {
         version: "1.0.114",
@@ -5493,6 +5527,7 @@ export const BuilderTools = [
         cardanoEra: "conway",
         dependencies: ["bech32", "Pallas"],
         traits: ["byron", "conway", "cip25"],
+        conwayReady: true,
       },
       {
         version: "2.0.0-alpha.0",
@@ -5660,6 +5695,8 @@ export const BuilderTools = [
         cardanoEra: "unknown",
         dependencies: [],
         traits: [],
+        conwayReady: true,
+        overridden: ["conwayReady"],
       },
       {
         version: "11.1.2",
@@ -6222,6 +6259,7 @@ export const BuilderTools = [
         cardanoEra: "conway",
         dependencies: ["Cardano Serialization Library"],
         traits: ["byron", "conway", "cip8", "cip30", "cip95"],
+        conwayReady: true,
       },
       {
         version: "0.7.0",
@@ -6281,6 +6319,8 @@ export const BuilderTools = [
         dependencies: ["cardano-addresses", "Plinth"],
         softReferences: ["cardano-cli", "cardano-node"],
         traits: [],
+        conwayReady: true,
+        overridden: ["conwayReady"],
       },
     ],
   },

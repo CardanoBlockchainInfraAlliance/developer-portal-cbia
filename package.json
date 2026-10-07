@@ -12,6 +12,7 @@
   "scripts": {
     "build-stats": "node scripts/generate-stats.js",
     "build-og": "node scripts/generate-og.js",
+    "sync-readiness": "node scripts/sync-intersect-readiness.mjs",
     "enrich-tools": "node scripts/analyze-builder-tools.mjs -i src/data/builder-tools/enriched-tools.js -o src/data/builder-tools/enriched-tools",
     "fix-llms": "node scripts/fix-llms-paths.js",
     "docusaurus": "docusaurus",

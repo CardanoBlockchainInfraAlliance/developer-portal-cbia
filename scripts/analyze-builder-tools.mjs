@@ -34,7 +34,8 @@
  *       cardanoEra: "Conway",                    ← only on latest
  *       dependencies: ["cardano-node"],          ← title of other listed tools
  *       softReferences: ["Kupo"],                ← documented integrations (README)
- *       traits: ["conway", "babbage", "cip30"]
+ *       traits: ["conway", "babbage", "plutus-v3", "cip30"],
+ *       conwayReady: true                        ← only on latest; absent = unknown
  *     },
  *     {
  *       version: "6.8.0",                        ← older releases: no deps
@@ -498,8 +499,18 @@ const CIP_RE = /\bCIP-?(\d+)\b/gi;
 const NOTABLE_CIPS = new Set([
   "1", "2", "3", "8", "9", "14", "19", "21", "25", "26", "27",
   "30", "31", "32", "33", "34", "36", "45", "50", "54", "57",
-  "67", "68", "86", "95", "100", "104", "108", "119", "129",
+  "67", "68", "86", "95", "100", "104", "105", "108", "119", "129", "1694",
 ]);
+// Plutus V3 only exists from the Conway era on, so it's evidence of Conway support
+const PLUTUS_V3_RE = /\bplutus[\s_-]?v3\b/i;
+
+// Evidence that a tool supports the current (Conway) era: naming the era,
+// Plutus V3, or the Conway governance CIPs.  Absence means "unknown", not "no";
+// a confirmed "no" (or "yes") comes from the overrides file.
+const CONWAY_EVIDENCE = new Set([
+  "conway", "plutus-v3", "cip95", "cip100", "cip105", "cip108", "cip119", "cip129", "cip1694",
+]);
+const isConwayReady = traits => (traits ?? []).some(t => CONWAY_EVIDENCE.has(t));
 
 function detectTraits(texts) {
   const traits = new Set();
@@ -508,17 +519,19 @@ function detectTraits(texts) {
     for (const era of ERA_TRAITS) {
       if (new RegExp(`\\b${era}\\b`, "i").test(text)) traits.add(era);
     }
+    if (PLUTUS_V3_RE.test(text)) traits.add("plutus-v3");
     let m;
     while ((m = CIP_RE.exec(text)) !== null) {
       if (NOTABLE_CIPS.has(m[1])) traits.add(`cip${m[1]}`);
     }
   }
-  // Return eras first (chronological), then CIPs (numeric)
+  // Return eras first (chronological), then Plutus V3, then CIPs (numeric)
   const eras = ERA_TRAITS.filter(e => traits.has(e));
+  const plutus = traits.has("plutus-v3") ? ["plutus-v3"] : [];
   const cips = [...traits].filter(t => t.startsWith("cip")).sort((a, b) => {
     return parseInt(a.slice(3)) - parseInt(b.slice(3));
   });
-  return [...eras, ...cips];
+  return [...eras, ...plutus, ...cips];
 }
 
 function latestEra(traits) {
@@ -695,6 +708,16 @@ async function main() {
     await new Promise(r => setTimeout(r, 400));
   }
 
+  // ─── Derived compatibility: conwayReady ───────────────────────────────────
+  // Recomputed from the latest release's traits on every run (so it also works
+  // with --offline), before overrides, which can set it either way.
+  for (const t of enriched) {
+    const latest = t.releases?.find(r => r.latest);
+    if (!latest) continue;
+    if (isConwayReady(latest.traits)) latest.conwayReady = true;
+    else delete latest.conwayReady;
+  }
+
   // ─── Hand-curated overrides ───────────────────────────────────────────────
   const titles = new Set(enriched.map(t => t.title));
   for (const [title, ov] of Object.entries(OVERRIDES)) {
@@ -707,6 +730,13 @@ async function main() {
     }
   }
   for (let i = 0; i < enriched.length; i++) enriched[i] = applyOverrides(enriched[i]);
+  // Curated traits count as evidence too, unless conwayReady itself is curated
+  for (const t of enriched) {
+    const latest = t.releases?.find(r => r.latest);
+    if (!latest?.overridden?.includes("traits") || latest.overridden.includes("conwayReady")) continue;
+    if (isConwayReady(latest.traits)) latest.conwayReady = true;
+    else delete latest.conwayReady;
+  }
   const isNoteOnly = ov => Object.keys(ov).every(k => k === "note");
   const applied = enriched.filter(t => OVERRIDES[t.title] && !isNoteOnly(OVERRIDES[t.title])).map(t => t.title);
   const flagged = enriched.filter(t => OVERRIDES[t.title] && isNoteOnly(OVERRIDES[t.title])).map(t => t.title);

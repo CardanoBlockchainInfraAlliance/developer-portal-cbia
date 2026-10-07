@@ -1,34 +1,68 @@
-This file includes the documentation for `CBIA Developer Tools Compatibility Matrix Project`, which aims to extend https://developers.cardano.org/tools/ with visualization for relationships and compatibility between tools.
+# CBIA Developer Tools Compatibility Matrix
 
-## UI Usage
+This fork of the [Cardano Developer Portal](https://developers.cardano.org/tools/) adds a view of how the portal's builder tools relate to each other and how compatible they are. It's the [CBIA](https://cbia.io) project [*Add Developer Tool Compatibility Matrix to Cardano Developers Portal*](https://projectcatalyst.io/funds/11/cardano-open-developers/cbia-add-developer-tool-compatibility-matrix-to-cardano-developers-portal) (Catalyst Fund 11, #1100088); milestone updates are in [developer-portal-proj-updates](https://github.com/CardanoBlockchainInfraAlliance/developer-portal-proj-updates).
 
-- A [running demo](https://45b.io/cbia-infra-tools/tools/) of our version of the tooling page is available.
+- **Dependency tree:** which tools each tool depends on, and which depend on it
+- **Trait matrix:** per tool, its latest release, what changed in what it depends on, who depends on it, its readiness, capabilities and health
+- **Two readiness sources:** detected from each tool's repository (default), or Intersect's hand-maintained hard fork readiness tracker, both laid over the same dependency graph
+- **Data refreshed by script** from GitHub and from Intersect's tracker, with a reviewed file for corrections that can't be detected
 
-- The visualization can be accessed via the "Explore relationships and compatibility" button, taking you to [/tools-rels-compat/](https://45b.io/cbia-infra-tools/tools-rels-compat/).
+[Running demo](https://45b.io/cbia-infra-tools-ms3/tools-rels-compat/), opened from the portal's tools page with the "Explore relationships and compatibility" button.
 
-- Toggles are available to opt between viewing in `Dependencies` or `Dependents` mode and `Top-level` or `All tools`.
+## UI usage
 
-- A `Soft refs` allows taking in consideration when tools mentions/integrates with each other but don't hard-depend.
+### Dependency tree
 
-- `Expand all` / `Collapse all` controls are available, as well as clicking tool items. Ctrl+click will fully expand an item.
+- The `Dependency tree` / `Dependents tree` button at the top left collapses or expands the tree.
+- `Dependencies` / `Dependents` switches between what each tool depends on and what depends on it; `Top-level` / `All tools` between the tools at the ends of the graph and every tool.
+- `Soft refs` adds documented integrations (a tool's README naming another) to the hard dependencies found in manifests.
+- Click a tool to expand or collapse it; Ctrl+click expands it fully. `Expand all` / `Collapse all` do the whole tree.
+- Click a category label at the bottom to show only that category; Ctrl+click adds more.
+- Each tool shows its readiness for the selected source (e.g. `✓` Conway-ready, or `in progress` on the Intersect tracker), and a red `blocked` when one of its dependencies is behind (hover for which). Hover a tool for its maker and description.
 
-- Category labels on the page bottom may also be clicked to filter the visualization. Ctrl+click will accumulate categories.
+### Trait matrix
 
-## Portal Files added or changed
+- `Trait matrix ▸`, under the category labels, opens a table of every tool's compatibility data. While it's open, the tree keeps a compact panel of its own at the top and the matrix follows below. Scrolling down pins the tree's controls under the navbar, then the category labels and matrix bar under them, then the matrix's column headings, so the matrix can be scrolled through without losing any controls (on phones, one panel at a time, switched with `Tree / matrix`).
+- Columns:
+  - **Latest release:** version and date (green when released in the last 90 days)
+  - **Depends on:** each dependency with its latest version, green when it was released in the last 90 days (dashed for soft references)
+  - **Depended on by:** count; hover for names
+  - **Readiness**, for the selected source: the tool's own status, the dependencies holding it back (`blocked by …`), and how many dependencies have no information
+  - **Capabilities**, grouped from the CIPs a tool names (wallet connection, token metadata, governance, blueprints, message signing); hover for which CIPs, click one to filter the matrix to every tool with it
+  - **Health:** active, stale (no commits for a year), pre-release (no stable release among the last 10), archived
+- Click a column header to sort; type in `Filter tools…` to search by name. The category labels filter the matrix too.
+- Every tool, in the tree and the matrix, has two icons on hover: the magnifier filters the matrix to **that tool only**, and the branch icon to **that tool and its branch**: everything it depends on in `Dependencies` mode, or everything that depends on it in `Dependents` mode (`Soft refs` included when on). The chip in the matrix bar shows the filter (a tool, a branch or a capability); `×` clears it, as does clicking a category. Choosing a tool also brings it into view in the tree, expanding its parents if needed.
 
-- `/src/components/BuilderToolsTree` include `index.js` and `tree.css`
+### Readiness sources
 
-- `/src/data/builder-tools/tools-rels-compat.html` -- initial stand-alone PoC
+The `Readiness` selector in the matrix bar picks where readiness comes from. Both use the same dependency graph, so `blocked` means the same thing in each: a hard dependency is known to be less than ready.
 
-- `/src/pages/tools/index.js` -- "Explore relationships and compatibility" link next to "View all tools alphabetically" (in `AllToolsReveal`)
+| Source | Era | How it's gathered | Values |
+|---|---|---|---|
+| **Repos · Conway (detected)** (default) | Conway, the current era | From each repository: naming Conway, Plutus V3 or a Conway governance CIP; plus curated corrections | `✓` ready, `✗` not ready, `?` unknown; `*` = curated |
+| **Intersect tracker · Dijkstra (PV12)** | Dijkstra, the next hard fork (protocol version 12) | Synced from [Intersect's readiness tracker](https://docs.google.com/spreadsheets/d/1C1Ai_YTqwKLHtICunzbh_o0FD9XB54Kh/edit?usp=sharing), where each team self-reports per network | `ready`, `in progress`, `reached out`, `n/a`, or none; per network (Musashi, DijkstraNet, Preview, PreProd, Mainnet; Mainnet by default, as Intersect counts it) |
 
-- `/src/pages/tools/styles.module.css` -- breadcrumb styles (used by the new page) and a gap between the two buttons above
+The tracker is filled in as teams report, so early in a hard fork cycle most tools show no information there. A link next to the selector opens the tracker, with the date of the last sync.
 
-- `/src/pages/tools-rels-compat/index.js` -- new page layout
+### Sharing a view
 
-- `/scripts/analyze-builder-tools.mjs` and `/src/data/builder-tools/enriched-tools.js` -- see *Data enriching* below
+The view is in the URL, e.g. `/tools-rels-compat/?tool=Kupo&branch=1&matrix=1&source=intersect&net=preview`, or `?cap=governance` for a capability (`tree=0` keeps the tree collapsed).
 
-- `package.json` -- `enrich-tools` script
+## Portal files added or changed
+
+| File | What |
+|---|---|
+| `/src/components/BuilderToolsTree/index.js`, `tree.css` | The tree, trait matrix, readiness model and filters |
+| `/src/pages/tools-rels-compat/index.js` | The new page |
+| `/src/pages/tools/index.js` | "Explore relationships and compatibility" link next to "View all tools alphabetically" (in `AllToolsReveal`) |
+| `/src/pages/tools/styles.module.css` | Breadcrumb styles (used by the new page) and a gap between the two buttons above |
+| `/scripts/analyze-builder-tools.mjs` | GitHub enrichment; see *Data enriching* |
+| `/scripts/sync-intersect-readiness.mjs` | Intersect tracker sync; see *Readiness from Intersect's tracker* |
+| `/src/data/builder-tools/enriched-tools.js` (`.json`) | Enriched tool data (generated) |
+| `/src/data/builder-tools/enriched-overrides.js` | Curated corrections (hand-edited) |
+| `/src/data/builder-tools/intersect-readiness.js` | Tracker statuses mapped to portal tools (generated) |
+| `/src/data/builder-tools/tools-rels-compat.html` | Initial stand-alone proof of concept |
+| `package.json` | `enrich-tools` and `sync-readiness` scripts |
 
 The tree's category colours and legend (`CATEGORY_COLORS`, `BUILDER_TOOLS_CATS`, `UTILITIES_CATS` in `/src/components/BuilderToolsTree/index.js`) are hardcoded. When upstream adds a category to `tags.js`, add it there too, or its tools show a grey dot and are hidden while all category filters are on.
 
@@ -45,6 +79,7 @@ The tree's category colours and legend (`CATEGORY_COLORS`, `BUILDER_TOOLS_CATS`,
 
 - **Script:** the input file is imported through a temporary `.mjs` copy (deleted afterwards), so it can keep its `.js` extension. The input's comment header and "ADD YOUR BUILDER TOOL ABOVE THIS LINE" marker are carried over to the output, and only `releases` is regenerated. A tool keeps its previous `releases` when it has no `repository`, or when fetching its GitHub metadata, releases list or manifest files fails.
 - **Dependency detection:** for each tool, the script reads the root manifests (`package.json`, `cabal.project`, `Cargo.toml`, `go.mod`, `pom.xml`, Gradle files, `pyproject.toml`, `requirements.txt`, `pnpm-lock.yaml`), the monorepo sub-package manifests under `packages/`, `modules/`, `libs/` etc., and the `README.md`. In manifests, it looks for other listed tools by GitHub slug (`owner/repo`) and by package name, using per-ecosystem lookup tables (npm, Go, Maven, Rust crates, Haskell, Python) near the top of the script. Matches there become `dependencies`. A tool that is only mentioned in the README becomes a `softReference` instead.
+- **Traits:** era names, `plutus-v3`, and notable CIPs (`cip30`, `cip68`, `cip1694`…) found in the manifests and README. The latest release also gets `conwayReady: true` when its traits show Conway support (the `conway` era, `plutus-v3`, or a Conway governance CIP); it's left out when there's no evidence, meaning *unknown*. The page groups CIPs into capabilities (wallet connection, token metadata, governance, blueprints, message signing).
 - **Releases:** up to the 10 most recent GitHub releases are listed, or a single synthetic `tip` entry when the repo has no formal releases. The entry marked `latest` is the newest stable release, as on GitHub (the newest prerelease only if all listed releases are prereleases). Only the latest entry carries the repo-level data (stars, forks, open issues, license, archived, last commit, Cardano era, `dependencies`, `softReferences`) and traits detected from the current manifests and README. Older entries only have version, tag, date, and traits detected from that release's notes. Their dependencies aren't recorded, since that would require reading old manifests.
 - **Shared repos:** when several tools share one repository (cardano-node and cardano-testnet; cardano-api, cardano-rpc and cardano-wasm), they all get that repo's releases, and a dependency on the repo is credited to the tool named after it.
 
@@ -118,18 +153,20 @@ With `npm run`, arguments after `--` are appended to the script's own, and a rep
 
 ### Manual overrides
 
-Some things can't be detected from GitHub, e.g. a repo that doesn't name the stack it runs on (Koios), a README that no longer mentions an era (Marlowe, Scalus), or a tool with no public repository (Maestro). `/src/data/builder-tools/enriched-overrides.js` holds those corrections, keyed by tool title. They're applied to the latest release at the end of every run, so refreshes and rebuilds never undo them:
+Some things can't be detected from GitHub, e.g. a repo that doesn't name the stack it runs on (Koios), core tools whose READMEs don't state the Conway support they've shipped (cardano-node, Ogmios, Aiken…), or a tool with no public repository (Maestro). `/src/data/builder-tools/enriched-overrides.js` holds those corrections, keyed by tool title. They're applied to the latest release at the end of every run, so refreshes and rebuilds never undo them:
 
 ```js
 Koios: {
   note: "Why this override exists (not written to the output)",
   dependencies: { add: ["cardano-node", "Ogmios"] },   // edit a detected list (add and/or remove)
   cardanoEra: "conway",                                // or replace a value outright
+  conwayReady: true,                                   // e.g. confirm readiness the repo doesn't state
 },
 ```
 
 - Dependency names are tool titles. The script warns about an override for an unknown tool, or one naming an unknown tool.
 - Overridden fields are listed in that release's `overridden` array, so curated data can be told apart from detected data.
+- An entry with only a `note` changes nothing: it flags doubtful data for reviewers (e.g. Typhonjs's detected era, or tools that are probably Conway-ready but not yet confirmed). Runs list these under *Flagged for review*.
 - After editing the file, apply it without calling GitHub: `yarn enrich-tools --offline`.
 - Removing an override takes effect on the next online run, which recomputes the field from GitHub.
 
@@ -142,3 +179,17 @@ The output is written in the same format as `tools.js` (same comment header, sam
 - If GitHub can't be reached for a tool (metadata, releases list, or all manifest files fail), that tool's previous `releases` are kept instead of being emptied.
 
 Refresh mode only knows about the tools already in `enriched-tools.js`. To pick up tools added or edited upstream in `tools.js`, use the *rebuild from upstream* command. Nothing is lost by doing so: `releases` comes from GitHub on every run either way, and `-r` brings over the hand-curated `releases` on tools with no repository (e.g. Maestro), which only exist in `enriched-tools.js`. A tool renamed upstream doesn't match by title, so check its `releases` in the diff.
+
+## Readiness from Intersect's tracker
+
+`scripts/sync-intersect-readiness.mjs` reads Intersect's [Dijkstra hard fork readiness tracker](https://docs.google.com/spreadsheets/d/1C1Ai_YTqwKLHtICunzbh_o0FD9XB54Kh/edit?usp=sharing) ([how it's run](https://cardanoupgrades.docs.intersectmbo.org/dijkstra-era-upgrade/dijkstra-upgrade-readiness)) and writes `/src/data/builder-tools/intersect-readiness.js`. No token is needed: the sheet is public, and each tab is read as CSV.
+
+```bash
+yarn sync-readiness        # or: npm run sync-readiness
+```
+
+- **Tabs read:** Core Infra, Tooling (Libraries, Tools, Indexers, Higher Level), Node Implementations, and Partner-chains. Exchanges, wallets, DApps, explorers and guidelines aren't builder tools on the portal, so they're skipped.
+- **Name mapping:** a sheet row matches a portal tool by title (case-insensitive) or through the `ALIASES` table at the top of the script, e.g. "MeshSDK" → Mesh, "Haskell - The Node" → cardano-node, "Cardano CLI, API & Node Integration" → cardano-cli and cardano-api. Rows with no match are listed at the end of each run; add an alias for a portal tool, or an empty alias to silence one that isn't on the portal.
+- **Statuses** per network: `none`, `reached-out`, `in-progress`, `ready`, `n/a` (counted as ready, as the tracker does). An unfamiliar value is kept as `other` with its text, and the run warns about it. A tool on two rows (Scalus is a library and a node) takes the more advanced status per network.
+- **Generated file:** don't edit `intersect-readiness.js` by hand; corrections belong in the tracker itself, which Intersect updates from PRs, email (hard-fork@intersectmbo.org) or comments on the sheet.
+- If a tab is renamed or removed, the run stops with an error instead of writing partial data.

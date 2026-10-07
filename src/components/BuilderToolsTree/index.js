@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import ExecutionEnvironment from "@docusaurus/ExecutionEnvironment";
 import { BuilderTools } from "@site/src/data/builder-tools/enriched-tools.js";
+import { IntersectReadiness } from "@site/src/data/builder-tools/intersect-readiness.js";
 import "./tree.css";
 
 export default function BuilderToolsTree() {
@@ -98,49 +99,90 @@ export default function BuilderToolsTree() {
     const hardDepsOf = t => latestOf(t).dependencies || [];
     const softDepsOf = t => latestOf(t).softReferences || [];
 
-    // ---- era compatibility -----------------------------------------------
-    const effectiveEra = t => {
-      const era = latestOf(t).cardanoEra;
-      return (era && era !== "unknown") ? era : null;
+    // ---- readiness: one model, two sources --------------------------------
+    // "repos": Conway readiness detected from GitHub (plus curation), in
+    //          enriched-tools.js.
+    // "intersect": Intersect's Dijkstra (PV12) readiness tracker, per network,
+    //          synced into intersect-readiness.js.
+    // Both map to a rank (0 not ready … 3 ready, null = no info), so the same
+    // dependency graph can tell which tools are held back by a dependency.
+    const READINESS_SOURCES = {
+      repos:     { label: "Repos · Conway (detected)", short: "Conway" },
+      intersect: { label: "Intersect tracker · Dijkstra (PV12)", short: "Dijkstra" },
     };
+    const NETWORK_LABELS = {
+      musashi: "Musashi", dijkstranet: "DijkstraNet", preview: "Preview", preprod: "PreProd", mainnet: "Mainnet",
+    };
+    const INTERSECT_STATUS = {
+      ready:         { rank: 3, text: "ready",       cls: "ready" },
+      "n/a":         { rank: 3, text: "n/a",         cls: "ready", tip: "Not applicable (counted as ready by the tracker)" },
+      "in-progress": { rank: 2, text: "in progress", cls: "progress" },
+      "reached-out": { rank: 1, text: "reached out", cls: "early" },
+    };
+    let readinessSource = "repos";
+    let readinessNet = "mainnet";
 
-    // ---- compat popover --------------------------------------------------
-    const popover = document.getElementById("compat-popover");
-
-    function showCompatPopover(badge, parentName, parentEra, childName, childEra) {
-      const ok = parentEra === childEra;
-      popover.innerHTML = `
-        <div class="pop-title">era compatibility</div>
-        <div class="pop-row"><span class="pop-tool">${parentName}</span><span class="pop-era">${parentEra}</span></div>
-        <hr class="pop-divider">
-        <div class="pop-row"><span class="pop-tool">${childName}</span><span class="pop-era">${ok ? childEra : '<span style="color:#ff7b72">' + childEra + "</span>"}</span></div>
-      `;
-      const r = badge.getBoundingClientRect();
-      const pw = popover.offsetWidth || 240;
-      let left = r.right + 8;
-      if (left + pw > window.innerWidth - 8) left = r.left - pw - 8;
-      popover.style.left = Math.max(8, left) + "px";
-      popover.style.top  = Math.max(8, r.top - 4) + "px";
-      popover.classList.add("visible");
+    // { rank, text, cls, tip } — rank null means no information
+    function readinessOf(t) {
+      if (readinessSource === "intersect") {
+        const entry = IntersectReadiness.tools[t.title];
+        if (!entry) return { rank: null, text: "", cls: "none", tip: "Not in Intersect's tracker" };
+        const status = entry.networks[readinessNet];
+        const s = INTERSECT_STATUS[status];
+        const net = NETWORK_LABELS[readinessNet];
+        if (!s) {
+          const raw = entry.raw?.[readinessNet];
+          return { rank: null, text: raw ? raw : "", cls: "none",
+                   tip: raw ? `Tracker says "${raw}" on ${net}` : `No info on ${net} yet` };
+        }
+        return { rank: s.rank, text: s.text, cls: s.cls,
+                 tip: `${s.tip || s.text[0].toUpperCase() + s.text.slice(1)} on ${net}${entry.criticalPath ? " · critical path" : ""}` };
+      }
+      const l = latestOf(t);
+      const curated = (l.overridden || []).includes("conwayReady");
+      if (l.conwayReady === true)
+        return { rank: 3, text: "✓", cls: "ready", curated,
+                 tip: curated ? "Conway-ready (curated)" : "Conway-ready: names Conway, Plutus V3 or a governance CIP" };
+      if (l.conwayReady === false)
+        return { rank: 0, text: "✗", cls: "not", curated: true, tip: "Not Conway-ready (curated)" };
+      return { rank: null, text: "?", cls: "none", tip: "Unknown: no Conway evidence found" };
     }
 
-    document.addEventListener("click", e => {
-      if (!e.target.classList.contains("compat-badge")) {
-        popover.classList.remove("visible");
+    // Hard dependencies with known readiness below "ready" hold a tool back,
+    // whatever its own status; dependencies with no info are only counted.
+    function blockersOf(t) {
+      const blockers = [], unknown = [];
+      for (const d of hardDepsOf(t)) {
+        const dep = byTitle.get(d);
+        if (!dep) continue;
+        const r = readinessOf(dep);
+        if (r.rank === null) unknown.push(d);
+        else if (r.rank < 3) blockers.push({ title: d, text: r.text, cls: r.cls });
       }
-    });
+      return { blockers, unknown };
+    }
 
-    function makeCompatBadge(parentEra, childEra, parentName, childName) {
-      if (!parentEra || !childEra) return null;
-      const ok = parentEra === childEra;
-      const badge = document.createElement("span");
-      badge.className = `compat-badge ${ok ? "compat-ok" : "compat-not"}`;
-      badge.textContent = ok ? "OK" : "≠";
-      badge.addEventListener("click", e => {
-        e.stopPropagation();
-        showCompatPopover(badge, parentName, parentEra, childName, childEra);
-      });
-      return badge;
+    // Small marks after a tool's name in the tree: its readiness, and a
+    // "blocked" flag when a dependency is behind.
+    function makeReadinessMarks(tool) {
+      const frag = document.createDocumentFragment();
+      const r = readinessOf(tool);
+      if (r.rank !== null) {
+        const m = document.createElement("span");
+        m.className = `rd-mark rd-${r.cls}`;
+        m.textContent = r.text;
+        m.title = r.tip;
+        frag.appendChild(m);
+      }
+      const { blockers } = blockersOf(tool);
+      if (blockers.length) {
+        const b = document.createElement("span");
+        b.className = "rd-blocked";
+        b.textContent = "blocked";
+        b.title = "Held back by: " + blockers.map(x => `${x.title} (${x.text})`).join(", ");
+        frag.appendChild(b);
+      }
+      return frag;
     }
 
     const sorted = [...BuilderTools].sort((a, b) => a.title.localeCompare(b.title));
@@ -201,19 +243,44 @@ export default function BuilderToolsTree() {
     const treeEl = document.getElementById("tree");
     const toolCountEl = document.getElementById("toolCount");
     const viewSub = document.getElementById("viewSub");
+    const treeTitleEl = document.getElementById("treeTitle");
+    const TREE_TITLES = { deps: "Dependency tree", dependents: "Dependents tree" };
     const VIEW_SUBS = {
-      deps_consumers:       "Dependency tree [what each depends on] · tools nothing else depends on",
-      deps_all:             "Dependency tree [what each depends on] · all tools",
-      dependents_consumers: "Dependents tree [what depends on each] · foundation tools",
-      dependents_all:       "Dependents tree [what depends on each] · all tools",
+      deps_consumers:       "what each depends on · tools nothing else depends on",
+      deps_all:             "what each depends on · all tools",
+      dependents_consumers: "what depends on each · foundation tools",
+      dependents_all:       "what depends on each · all tools",
     };
 
-    function buildNode(tool, ancestors, parentEra = null, parentName = null) {
-      const node = document.createElement("div");
-      node.className = "node";
+    // ---- tool actions: "this tool only" / "this tool and its branch" -------
+    const ICON_TOOL = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="10" y1="10" x2="14.5" y2="14.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+    const ICON_BRANCH = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="4" cy="3" r="1.8" fill="currentColor"/><circle cx="4" cy="13" r="1.8" fill="currentColor"/><circle cx="12" cy="8" r="1.8" fill="currentColor"/><path d="M4 4.8v6.4M4 8h4.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
 
+    function makeToolActions(tool) {
+      const wrap = document.createElement("span");
+      wrap.className = "tool-actions";
+      for (const [branch, icon, what] of [[false, ICON_TOOL, "this tool only"], [true, ICON_BRANCH, "this tool and its branch"]]) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tool-action";
+        btn.innerHTML = icon;
+        btn.title = `Trait matrix: ${what}`;
+        btn.setAttribute("aria-label", `${tool.title}: show ${what} in the trait matrix`);
+        btn.addEventListener("click", e => {
+          e.stopPropagation();
+          selectTool(tool.title, branch);
+        });
+        wrap.appendChild(btn);
+      }
+      return wrap;
+    }
+
+    // Row shared by both tree directions: toggle, category dot, title,
+    // readiness marks, and the tool actions.
+    function makeRow(tool) {
       const row = document.createElement("div");
       row.className = "node-row";
+      row.dataset.title = tool.title;
 
       const toggle = document.createElement("span");
       toggle.className = "toggle";
@@ -230,10 +297,17 @@ export default function BuilderToolsTree() {
 
       row.append(toggle, dot, label);
 
-      const badge = makeCompatBadge(parentEra, effectiveEra(tool), parentName, tool.title);
-      if (badge) row.appendChild(badge);
+      row.appendChild(makeReadinessMarks(tool));
 
       attachTooltip(row, tool);
+      return { row, toggle };
+    }
+
+    function buildNode(tool, ancestors) {
+      const node = document.createElement("div");
+      node.className = "node";
+
+      const { row, toggle } = makeRow(tool);
       node.appendChild(row);
 
       const isCycle = ancestors.has(tool.title);
@@ -249,6 +323,8 @@ export default function BuilderToolsTree() {
         row.appendChild(cm);
       }
 
+      row.appendChild(makeToolActions(tool));
+
       if (childTitles.length) {
         toggle.textContent = "▾";
         row.classList.add("interactive");
@@ -260,10 +336,9 @@ export default function BuilderToolsTree() {
         childrenWrap.appendChild(inner);
 
         const nextAncestors = new Set(ancestors).add(tool.title);
-        const toolEra = effectiveEra(tool);
         childTitles
           .sort((a, b) => a.title.localeCompare(b.title))
-          .forEach(child => inner.appendChild(buildNode(child, nextAncestors, toolEra, tool.title)));
+          .forEach(child => inner.appendChild(buildNode(child, nextAncestors)));
 
         node.appendChild(childrenWrap);
 
@@ -283,32 +358,11 @@ export default function BuilderToolsTree() {
       return node;
     }
 
-    function buildNodeReverse(tool, ancestors, parentEra = null, parentName = null) {
+    function buildNodeReverse(tool, ancestors) {
       const node = document.createElement("div");
       node.className = "node";
 
-      const row = document.createElement("div");
-      row.className = "node-row";
-
-      const toggle = document.createElement("span");
-      toggle.className = "toggle";
-
-      const dot = document.createElement("span");
-      dot.className = "dot";
-      dot.style.color = colorFor(tool.category);
-      dot.style.background = colorFor(tool.category);
-      dot.title = tool.category;
-
-      const label = document.createElement("span");
-      label.className = "label";
-      label.textContent = tool.title;
-
-      row.append(toggle, dot, label);
-
-      const badge = makeCompatBadge(parentEra, effectiveEra(tool), parentName, tool.title);
-      if (badge) row.appendChild(badge);
-
-      attachTooltip(row, tool);
+      const { row, toggle } = makeRow(tool);
       node.appendChild(row);
 
       const isCycle = ancestors.has(tool.title);
@@ -322,6 +376,8 @@ export default function BuilderToolsTree() {
         row.appendChild(cm);
       }
 
+      row.appendChild(makeToolActions(tool));
+
       if (childTools.length) {
         toggle.textContent = "▾";
         row.classList.add("interactive");
@@ -333,10 +389,9 @@ export default function BuilderToolsTree() {
         childrenWrap.appendChild(inner);
 
         const nextAncestors = new Set(ancestors).add(tool.title);
-        const toolEra = effectiveEra(tool);
         childTools
           .sort((a, b) => a.title.localeCompare(b.title))
-          .forEach(child => inner.appendChild(buildNodeReverse(child, nextAncestors, toolEra, tool.title)));
+          .forEach(child => inner.appendChild(buildNodeReverse(child, nextAncestors)));
 
         node.appendChild(childrenWrap);
 
@@ -375,10 +430,454 @@ export default function BuilderToolsTree() {
       const frag = document.createDocumentFragment();
       filteredRoots.forEach(r => frag.appendChild(buildFn(r, new Set())));
       treeEl.appendChild(frag);
-      const knownEraCount = BuilderTools.filter(t => effectiveEra(t)).length;
+      const readyCount = BuilderTools.filter(t => readinessOf(t).rank === 3).length;
+      const readyWhat = readinessSource === "intersect"
+        ? `Dijkstra-ready on ${NETWORK_LABELS[readinessNet]}`
+        : "Conway-ready";
       toolCountEl.innerHTML =
-        `<strong>${BuilderTools.length}</strong> tools total · <strong>${filteredRoots.length}</strong> shown at root · <strong>${knownEraCount}</strong> known era`;
+        `<strong>${BuilderTools.length}</strong> tools total · <strong>${filteredRoots.length}</strong> shown at root · <strong>${readyCount}</strong> ${readyWhat}`;
       if (viewSub) viewSub.textContent = VIEW_SUBS[`${dir}_${view}`];
+      if (treeTitleEl) treeTitleEl.textContent = TREE_TITLES[dir];
+      markSelectionInTree();
+      renderMatrix();
+    }
+
+    // ---- trait matrix ----------------------------------------------------
+    // Rows: the selected tool (or it and its branch), else the tools in the
+    // active categories.  Columns answer the Ms3 questions: what changed in
+    // what I depend on, who depends on me, and the tool's traits.
+    const DAY = 864e5;
+    const RECENT_DAYS = 90;
+    const STALE_DAYS = 365;
+    const now = Date.now();
+    const daysSince = iso => (iso ? (now - new Date(iso).getTime()) / DAY : null);
+    const fmtDate = iso => (iso ? iso.slice(0, 10) : "");
+
+    // CIPs grouped into the capabilities a builder looks for
+    const CAPABILITIES = [
+      { key: "wallet",     label: "Wallet connection", cips: ["cip30", "cip45", "cip95"] },
+      { key: "tokens",     label: "Token metadata",    cips: ["cip14", "cip25", "cip26", "cip27", "cip67", "cip68"] },
+      { key: "governance", label: "Governance",        cips: ["cip95", "cip100", "cip105", "cip108", "cip119", "cip129", "cip1694"] },
+      { key: "blueprint",  label: "Blueprints",        cips: ["cip57"] },
+      { key: "signing",    label: "Message signing",   cips: ["cip8"] },
+    ];
+    const capabilitiesOf = t => {
+      const traits = new Set(latestOf(t).traits || []);
+      return CAPABILITIES
+        .map(c => ({ ...c, via: c.cips.filter(x => traits.has(x)) }))
+        .filter(c => c.via.length);
+    };
+
+    const healthOf = t => {
+      const l = latestOf(t);
+      const tags = [];
+      if (l.archived) tags.push({ cls: "bad", text: "archived", tip: "Archived on GitHub" });
+      const age = daysSince(l.lastCommitDate);
+      if (age !== null && age > STALE_DAYS)
+        tags.push({ cls: "warn", text: "stale", tip: `No commits since ${fmtDate(l.lastCommitDate)}` });
+      if (l.prerelease) tags.push({ cls: "warn", text: "pre-release", tip: "Latest is a pre-release: none of the last 10 releases is stable" });
+      if (!tags.length && age !== null)
+        tags.push({ cls: "ok", text: "active", tip: `Last commit ${fmtDate(l.lastCommitDate)}` });
+      return tags;
+    };
+    const healthRank = t => {
+      const tags = healthOf(t).map(h => h.text);
+      return tags.includes("archived") ? 3 : tags.includes("stale") ? 2 : tags.includes("pre-release") ? 1 : tags.length ? 0 : 4;
+    };
+
+    const releaseDate = t => { const l = latestOf(t); return l.publishedAt || l.lastCommitDate || null; };
+    const versionOf = t => latestOf(t).version || null;
+
+    // Everything reachable from `title` in the tree's current direction
+    function branchOf(title) {
+      const isDep = document.querySelector("input[name='direction']:checked").value === "deps";
+      const next = isDep
+        ? t => depsOf(byTitle.get(t) || {}).filter(d => byTitle.has(d))
+        : t => [...(reverseDeps.get(t) ?? [])].map(x => x.title);
+      const seen = new Set([title]);
+      const stack = [title];
+      while (stack.length) {
+        for (const n of next(stack.pop())) if (!seen.has(n)) { seen.add(n); stack.push(n); }
+      }
+      return seen;
+    }
+
+    // The matrix filter: a tool (alone or with its branch) or a capability
+    let selection = { tool: null, branch: false, capability: null };
+    const NO_SELECTION = { tool: null, branch: false, capability: null };
+    const hasCapability = (t, key) => capabilitiesOf(t).some(c => c.key === key);
+    let matrixSearch = "";
+    let matrixSort = { key: "tool", dir: 1 };
+
+    const wrapEl = document.getElementById("btt-wrap");
+    const matrixEl = document.getElementById("matrix");
+    const matrixCountEl = document.getElementById("matrixCount");
+    const selChipEl = document.getElementById("selChip");
+
+    const SORTS = {
+      tool:       t => t.title.toLowerCase(),
+      latest:     t => -(new Date(releaseDate(t) || 0).getTime()),
+      dependents: t => -((reverseDeps.get(t.title)?.size) || 0),
+      readiness:  t => { const r = readinessOf(t).rank; return r === null ? 9 : 3 - r; },
+      health:     t => healthRank(t),
+    };
+
+    function matrixRows() {
+      let rows;
+      if (selection.capability) {
+        rows = sorted.filter(t => hasCapability(t, selection.capability));
+      } else if (selection.tool && byTitle.has(selection.tool)) {
+        const titles = selection.branch ? branchOf(selection.tool) : new Set([selection.tool]);
+        rows = sorted.filter(t => titles.has(t.title));
+      } else {
+        rows = activeCategories.size === allCatKeys.size
+          ? sorted
+          : sorted.filter(t => activeCategories.has(t.category));
+      }
+      const q = matrixSearch.trim().toLowerCase();
+      if (q) rows = rows.filter(t => t.title.toLowerCase().includes(q));
+      const key = SORTS[matrixSort.key];
+      return [...rows].sort((a, b) => {
+        const ka = key(a), kb = key(b);
+        if (ka < kb) return -matrixSort.dir;
+        if (ka > kb) return matrixSort.dir;
+        return a.title.localeCompare(b.title);
+      });
+    }
+
+    const el = (tag, cls, text) => {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text != null) e.textContent = text;
+      return e;
+    };
+
+    function depCell(t) {
+      const cell = el("td", "m-deps");
+      const hard = new Set(hardDepsOf(t));
+      const deps = depsOf(t).map(d => byTitle.get(d)).filter(Boolean)
+        .sort((a, b) => a.title.localeCompare(b.title));
+      if (!deps.length) { cell.appendChild(el("span", "m-none", "—")); return cell; }
+      for (const d of deps) {
+        const date = releaseDate(d);
+        const age = daysSince(date);
+        const chip = el("span", "dep-chip");
+        if (!hard.has(d.title)) chip.classList.add("soft");
+        const isTip = versionOf(d) === "tip";
+        if (!isTip && age !== null && age <= RECENT_DAYS) chip.classList.add("recent");
+        chip.appendChild(el("span", "dep-name", d.title));
+        const v = versionOf(d);
+        if (v) chip.appendChild(el("span", "dep-ver", v));
+        chip.title = [
+          `${d.title}${v ? " " + v : ""}`,
+          !date ? "no release data"
+            : isTip ? `no releases; last commit ${fmtDate(date)}`
+            : `released ${fmtDate(date)}${age <= RECENT_DAYS ? ` (${Math.round(age)} days ago)` : ""}`,
+          hard.has(d.title) ? "dependency" : "soft reference (documented integration)",
+        ].join("\n");
+        cell.appendChild(chip);
+      }
+      return cell;
+    }
+
+    function renderMatrix() {
+      if (!matrixEl) return;
+      const rows = matrixRows();
+      const capSel = CAPABILITIES.find(c => c.key === selection.capability);
+      const selected = !!capSel || (selection.tool && byTitle.has(selection.tool));
+
+      // selection chip
+      selChipEl.innerHTML = "";
+      selChipEl.hidden = !selected;
+      if (selected) {
+        selChipEl.appendChild(el("span", "", capSel
+          ? `Capability: ${capSel.label}`
+          : `${selection.branch ? "Branch" : "Tool"}: ${selection.tool}`));
+        const x = el("button", "chip-x", "×");
+        x.type = "button";
+        x.title = "Clear filter";
+        x.addEventListener("click", () => selectTool(null));
+        selChipEl.appendChild(x);
+      }
+      matrixCountEl.textContent = `${rows.length} of ${BuilderTools.length} tools`;
+
+      const table = el("table", "matrix-table");
+      const thead = el("thead");
+      const hr = el("tr");
+      const COLS = [
+        ["tool", "Tool"], ["latest", "Latest release"], [null, "Depends on (latest releases)"],
+        ["dependents", "Depended\non by"],
+        ["readiness", readinessSource === "intersect"
+          ? `Readiness\nDijkstra · ${NETWORK_LABELS[readinessNet]}` : "Readiness\nConway"],
+        [null, "Capabilities"], ["health", "Health"],
+      ];
+      for (const [key, label] of COLS) {
+        const th = el("th", key ? "sortable" : "", label);
+        if (key) {
+          if (matrixSort.key === key) th.dataset.dir = matrixSort.dir > 0 ? "asc" : "desc";
+          th.addEventListener("click", () => {
+            matrixSort = matrixSort.key === key ? { key, dir: -matrixSort.dir } : { key, dir: 1 };
+            renderMatrix();
+          });
+        }
+        hr.appendChild(th);
+      }
+      thead.appendChild(hr);
+      table.appendChild(thead);
+
+      const tbody = el("tbody");
+      for (const t of rows) {
+        const tr = el("tr");
+        if (t.title === selection.tool) tr.classList.add("is-selected");
+
+        const tdTool = el("td", "m-tool");
+        const dot = el("span", "dot");
+        dot.style.background = colorFor(t.category);
+        dot.title = t.category;
+        const name = el("span", "label", t.title);
+        tdTool.append(dot, name, makeToolActions(t));
+        attachTooltip(tdTool, t);
+        tr.appendChild(tdTool);
+
+        const date = releaseDate(t);
+        const tdLatest = el("td", "m-latest");
+        if (versionOf(t) || date) {
+          tdLatest.appendChild(el("span", "m-ver", versionOf(t) || ""));
+          if (date) {
+            const d = el("span", "m-date", fmtDate(date));
+            if (versionOf(t) !== "tip" && daysSince(date) <= RECENT_DAYS) d.classList.add("recent");
+            if (versionOf(t) === "tip") d.title = "No releases; date of the last commit";
+            tdLatest.appendChild(d);
+          }
+        } else tdLatest.appendChild(el("span", "m-none", "no repository data"));
+        tr.appendChild(tdLatest);
+
+        tr.appendChild(depCell(t));
+
+        const users = [...(reverseDeps.get(t.title) ?? [])].map(x => x.title).sort();
+        const tdUsers = el("td", "m-users", users.length ? String(users.length) : "—");
+        if (users.length) tdUsers.title = users.join(", ");
+        tr.appendChild(tdUsers);
+
+        const r = readinessOf(t);
+        const tdReady = el("td", "m-ready");
+        const mark = el("span", `rd-mark rd-${r.cls}`, r.text || "—");
+        mark.title = r.tip;
+        if (r.curated) mark.classList.add("curated");
+        tdReady.appendChild(mark);
+        const { blockers, unknown } = blockersOf(t);
+        if (blockers.length) {
+          const b = el("div", "rd-blockers", "blocked by ");
+          blockers.forEach((x, i) => {
+            const n = el("span", `rd-dep rd-${x.cls}`, x.title);
+            n.title = `${x.title}: ${x.text}`;
+            b.appendChild(n);
+            if (i < blockers.length - 1) b.appendChild(document.createTextNode(", "));
+          });
+          tdReady.appendChild(b);
+        }
+        if (unknown.length) {
+          const u = el("div", "rd-unknown", `${unknown.length} dep${unknown.length > 1 ? "s" : ""} no info`);
+          u.title = unknown.join(", ");
+          tdReady.appendChild(u);
+        }
+        tr.appendChild(tdReady);
+
+        const tdCaps = el("td", "m-caps");
+        const caps = capabilitiesOf(t);
+        if (!caps.length) tdCaps.appendChild(el("span", "m-none", "—"));
+        for (const cap of caps) {
+          const tag = el("button", "cap-tag", cap.label);
+          tag.type = "button";
+          if (cap.key === selection.capability) tag.classList.add("active");
+          tag.title = `${cap.via.map(x => x.replace("cip", "CIP-")).join(", ")} · click to show every tool with ${cap.label.toLowerCase()}`;
+          tag.addEventListener("click", () =>
+            selectCapability(cap.key === selection.capability ? null : cap.key));
+          tdCaps.appendChild(tag);
+        }
+        tr.appendChild(tdCaps);
+
+        const tdHealth = el("td", "m-health");
+        for (const h of healthOf(t)) {
+          const tag = el("span", `health-tag ${h.cls}`, h.text);
+          tag.title = h.tip;
+          tdHealth.appendChild(tag);
+        }
+        tr.appendChild(tdHealth);
+
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+
+      matrixEl.innerHTML = "";
+      if (rows.length) matrixEl.appendChild(table);
+      else matrixEl.appendChild(el("div", "m-empty", "No tools match."));
+    }
+
+    // ---- selection, matrix open state, URL --------------------------------
+    function markSelectionInTree() {
+      const branch = selection.capability
+        ? new Set(sorted.filter(t => hasCapability(t, selection.capability)).map(t => t.title))
+        : selection.tool && selection.branch ? branchOf(selection.tool) : null;
+      treeEl.querySelectorAll(".node-row").forEach(r => {
+        const t = r.dataset.title;
+        r.classList.toggle("is-selected", t === selection.tool);
+        r.classList.toggle("in-branch", !!branch && t !== selection.tool && branch.has(t));
+      });
+    }
+
+    function writeUrl() {
+      const url = new URL(window.location.href);
+      const p = url.searchParams;
+      if (selection.tool) p.set("tool", selection.tool); else p.delete("tool");
+      if (selection.tool && selection.branch) p.set("branch", "1"); else p.delete("branch");
+      if (selection.capability) p.set("cap", selection.capability); else p.delete("cap");
+      if (wrapEl.classList.contains("matrix-open")) p.set("matrix", "1"); else p.delete("matrix");
+      if (wrapEl.classList.contains("tree-collapsed")) p.set("tree", "0"); else p.delete("tree");
+      if (readinessSource !== "repos") p.set("source", readinessSource); else p.delete("source");
+      if (readinessSource === "intersect" && readinessNet !== "mainnet") p.set("net", readinessNet); else p.delete("net");
+      window.history.replaceState(window.history.state, "", url.toString());
+    }
+
+    function setMatrixOpen(open, scroll = true) {
+      wrapEl.classList.toggle("matrix-open", open);
+      wrapEl.classList.remove("show-tree");
+      document.getElementById("matrixToggle").setAttribute("aria-expanded", String(open));
+      if (open && scroll) {
+        const nav = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--ifm-navbar-height")) || 60;
+        window.scrollTo({ top: wrapEl.getBoundingClientRect().top + window.scrollY - nav, behavior: "smooth" });
+      }
+      writeUrl();
+    }
+
+    function selectTool(title, branch = false) {
+      selection = { ...NO_SELECTION, tool: title, branch: !!(title && branch) };
+      const opening = title && !wrapEl.classList.contains("matrix-open");
+      if (opening) setMatrixOpen(true);
+      markSelectionInTree();
+      renderMatrix();
+      writeUrl();
+      if (title) revealInTree(title, !opening);
+    }
+
+    // Bring the selected tool's row into view in the tree: its shallowest
+    // occurrence (a tool can appear under several parents), expanding any
+    // collapsed ancestors, and scrolling the tree panel, plus the page when
+    // the panel itself is out of sight under the pinned controls.
+    function revealInTree(title, scrollPage) {
+      if (wrapEl.classList.contains("tree-collapsed")) return;
+      const depth = r => { let d = 0; for (let n = r.parentElement; n && n !== treeEl; n = n.parentElement) if (n.classList.contains("node")) d++; return d; };
+      const rows = [...treeEl.querySelectorAll(".node-row")].filter(r => r.dataset.title === title);
+      if (!rows.length) return;
+      const row = rows.reduce((a, b) => (depth(b) < depth(a) ? b : a));
+
+      for (let n = row.parentElement.parentElement; n && n !== treeEl; n = n.parentElement)
+        if (n.classList.contains("node")) n.classList.remove("collapsed");
+
+      const panel = document.getElementById("tree-panel");
+      const pinnedBottom = headerEl.getBoundingClientRect().bottom;
+      const pr = panel.getBoundingClientRect();
+      if (scrollPage && (pr.top < pinnedBottom || pr.top > window.innerHeight - 80)) {
+        const nav = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--ifm-navbar-height")) || 60;
+        window.scrollTo({ top: wrapEl.getBoundingClientRect().top + window.scrollY - nav, behavior: "smooth" });
+      }
+      // Wait for the expand transition before measuring the row's position
+      setTimeout(() => {
+        if (wrapEl.classList.contains("matrix-open")) {
+          const top = row.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop;
+          if (top < panel.scrollTop || top > panel.scrollTop + panel.clientHeight - row.offsetHeight)
+            panel.scrollTo({ top: Math.max(0, top - panel.clientHeight / 3), behavior: "smooth" });
+        } else {
+          row.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+        row.classList.remove("flash");
+        void row.offsetWidth;
+        row.classList.add("flash");
+      }, 280);
+    }
+
+    function selectCapability(key) {
+      selection = { ...NO_SELECTION, capability: key };
+      markSelectionInTree();
+      renderMatrix();
+      writeUrl();
+    }
+
+    // Tree panel toggle (the "Dependency / Dependents tree" title)
+    const treeToggle = document.getElementById("treeToggle");
+    function setTreeOpen(open) {
+      wrapEl.classList.toggle("tree-collapsed", !open);
+      treeToggle.setAttribute("aria-expanded", String(open));
+      writeUrl();
+    }
+    treeToggle.addEventListener("click", () =>
+      setTreeOpen(wrapEl.classList.contains("tree-collapsed")));
+
+    // Pinned stack while the matrix is open: the header sticks under the
+    // navbar, the footer (labels + matrix bar) under the header, and the
+    // matrix's column headings under both.  Their offsets follow the header
+    // and footer heights, which change as controls wrap.
+    const headerEl = wrapEl.querySelector(".btt-header");
+    const footerEl = wrapEl.querySelector(".btt-footer");
+    const setPinOffsets = () => {
+      wrapEl.style.setProperty("--btt-header-h", `${headerEl.offsetHeight}px`);
+      wrapEl.style.setProperty("--btt-footer-h", `${footerEl.offsetHeight}px`);
+    };
+    setPinOffsets();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(setPinOffsets);
+      ro.observe(headerEl);
+      ro.observe(footerEl);
+    }
+
+    document.getElementById("matrixToggle").addEventListener("click", () =>
+      setMatrixOpen(!wrapEl.classList.contains("matrix-open")));
+    document.getElementById("matrixSearch").addEventListener("input", e => {
+      matrixSearch = e.target.value;
+      renderMatrix();
+    });
+    document.getElementById("showTree").addEventListener("click", () =>
+      wrapEl.classList.toggle("show-tree"));
+
+    // Readiness source + network: re-render tree marks and the matrix
+    const sourceSel = document.getElementById("readinessSource");
+    const netSel = document.getElementById("readinessNet");
+    const sourceLink = document.getElementById("readinessLink");
+    function syncReadinessControls() {
+      sourceSel.value = readinessSource;
+      netSel.value = readinessNet;
+      const isInt = readinessSource === "intersect";
+      netSel.hidden = !isInt;
+      sourceLink.hidden = !isInt;
+      if (isInt) {
+        sourceLink.href = IntersectReadiness.source.sheetUrl;
+        sourceLink.textContent = `tracker ↗ (synced ${IntersectReadiness.source.syncedAt.slice(0, 10)})`;
+      }
+    }
+    sourceSel.addEventListener("change", () => {
+      readinessSource = sourceSel.value;
+      syncReadinessControls();
+      renderTree();
+      writeUrl();
+    });
+    netSel.addEventListener("change", () => {
+      readinessNet = netSel.value;
+      renderTree();
+      writeUrl();
+    });
+
+    // Initial state from the URL (?tool=Ogmios&branch=1&matrix=1)
+    {
+      const p = new URLSearchParams(window.location.search);
+      if (READINESS_SOURCES[p.get("source")]) readinessSource = p.get("source");
+      if (NETWORK_LABELS[p.get("net")]) readinessNet = p.get("net");
+      syncReadinessControls();
+      const t = p.get("tool");
+      const cap = p.get("cap");
+      if (CAPABILITIES.some(c => c.key === cap)) selection = { ...NO_SELECTION, capability: cap };
+      else if (t && byTitle.has(t)) selection = { ...NO_SELECTION, tool: t, branch: p.get("branch") === "1" };
+      if (p.get("matrix") === "1" || selection.tool || selection.capability) setMatrixOpen(true, false);
+      if (p.get("tree") === "0") setTreeOpen(false);
     }
 
     renderTree();
@@ -449,6 +948,7 @@ export default function BuilderToolsTree() {
             }
           }
           updateLegendVisuals();
+          if (selection.tool || selection.capability) { selection = { ...NO_SELECTION }; writeUrl(); }
           renderTree();
         });
 
@@ -465,13 +965,15 @@ export default function BuilderToolsTree() {
   if (!ExecutionEnvironment.canUseDOM) return null;
 
   return (
-    <div className="btt-wrap">
-      <div id="compat-popover"></div>
+    <div className="btt-wrap" id="btt-wrap">
       <div id="tool-tooltip"></div>
 
       <div className="btt-header">
         <div className="brand">
-<span className="sub" id="viewSub">dependency tree · titles only · tools that nobody else depends on</span>
+          <button type="button" className="ctl panel-toggle" id="treeToggle" aria-expanded="true" aria-controls="tree-panel">
+            <span className="caret" aria-hidden>▸</span> <span id="treeTitle">Dependents tree</span>
+          </button>
+          <span className="sub" id="viewSub"></span>
         </div>
 
         <div className="view-toggle">
@@ -501,11 +1003,40 @@ export default function BuilderToolsTree() {
         <span className="tool-count" id="toolCount"></span>
       </div>
 
-      <div className="btt-main">
+      <div className="btt-main" id="tree-panel">
         <div id="tree"></div>
       </div>
 
-      <div id="legend" className="btt-legend"></div>
+      <div className="btt-footer">
+        <div id="legend" className="btt-legend"></div>
+
+        <div className="btt-matrix-bar">
+          <button type="button" className="ctl panel-toggle matrix-toggle" id="matrixToggle" aria-expanded="false" aria-controls="matrix">
+            <span className="caret" aria-hidden>▸</span> Trait matrix
+          </button>
+          <span className="sel-chip" id="selChip" hidden></span>
+          <label className="rd-control">
+            Readiness
+            <select id="readinessSource" defaultValue="repos" aria-label="Readiness source">
+              <option value="repos">Repos · Conway (detected)</option>
+              <option value="intersect">Intersect tracker · Dijkstra (PV12)</option>
+            </select>
+            <select id="readinessNet" defaultValue="mainnet" aria-label="Network" hidden>
+              <option value="musashi">Musashi</option>
+              <option value="dijkstranet">DijkstraNet</option>
+              <option value="preview">Preview</option>
+              <option value="preprod">PreProd</option>
+              <option value="mainnet">Mainnet</option>
+            </select>
+          </label>
+          <a className="rd-link" id="readinessLink" target="_blank" rel="noopener noreferrer" hidden></a>
+          <input type="search" className="matrix-search" id="matrixSearch" placeholder="Filter tools…" aria-label="Filter the trait matrix by tool name" />
+          <span className="tool-count" id="matrixCount"></span>
+          <button type="button" className="ctl show-tree-btn" id="showTree">Tree / matrix</button>
+        </div>
+      </div>
+
+      <div className="btt-matrix" id="matrix"></div>
     </div>
   );
 }
