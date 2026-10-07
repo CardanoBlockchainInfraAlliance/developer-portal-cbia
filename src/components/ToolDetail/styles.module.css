@@ -102,7 +102,7 @@ html[data-theme="dark"] .breadcrumb a:focus-visible {
   margin-top: 0.5rem;
 }
 
-/* Icon-only share control: the shared outline button as a circle. The
+/* Icon-only controls (share, relationships): the shared outline button as a circle. The
    compound beats the global padding vars regardless of stylesheet order. */
 :global(.button).iconButton {
   --ifm-button-padding-vertical: 0;

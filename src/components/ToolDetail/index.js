@@ -72,6 +72,28 @@ function getRelatedTools(current) {
     .slice(0, RELATED_LIMIT);
 }
 
+// Opens the tool, with its branch, in the relationships and compatibility view
+function RelsCompatButton({ title }) {
+  const query = new URLSearchParams({ matrix: "1", tool: title, branch: "1" });
+  return (
+    <Link
+      to={`/tools-rels-compat/?${query}`}
+      className={clsx("button button--outline button--primary", styles.iconButton)}
+      aria-label="Relationships and compatibility"
+      title="Relationships and compatibility"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden focusable="false">
+        <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="6" cy="5" r="2.5" />
+          <circle cx="6" cy="19" r="2.5" />
+          <circle cx="18" cy="12" r="2.5" />
+          <path d="M6 7.5v9M6 12h9.5" />
+        </g>
+      </svg>
+    </Link>
+  );
+}
+
 function ShareButton({ title }) {
   const [copied, copy] = useCopyToClipboard();
   const onClick = async () => {
@@ -272,6 +294,7 @@ export default function ToolDetail({ slug, screenshotSizes = [] }) {
                 <ExternalArrow />
               </Link>
             )}
+            <RelsCompatButton title={tool.title} />
             <ShareButton title={tool.title} />
           </div>
 

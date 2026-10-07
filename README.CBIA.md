@@ -3,7 +3,7 @@
 This fork of the [Cardano Developer Portal](https://developers.cardano.org/tools/) adds a view of how the portal's builder tools relate to each other and how compatible they are. It's the [CBIA](https://cbia.io) project [*Add Developer Tool Compatibility Matrix to Cardano Developers Portal*](https://projectcatalyst.io/funds/11/cardano-open-developers/cbia-add-developer-tool-compatibility-matrix-to-cardano-developers-portal) (Catalyst Fund 11, #1100088); milestone updates are in [developer-portal-proj-updates](https://github.com/CardanoBlockchainInfraAlliance/developer-portal-proj-updates).
 
 - **Dependency tree:** which tools each tool depends on, and which depend on it
-- **Trait matrix:** per tool, its latest release, what changed in what it depends on, who depends on it, its readiness, capabilities and health
+- **Trait matrix:** per tool, its latest release, what changed in what it depends on, who depends on it, its readiness, traits and health
 - **Two readiness sources:** detected from each tool's repository (default), or Intersect's hand-maintained hard fork readiness tracker, both laid over the same dependency graph
 - **Data refreshed by script** from GitHub and from Intersect's tracker, with a reviewed file for corrections that can't be detected
 
@@ -22,16 +22,16 @@ This fork of the [Cardano Developer Portal](https://developers.cardano.org/tools
 
 ### Trait matrix
 
-- `Trait matrix ▸`, under the category labels, opens a table of every tool's compatibility data. While it's open, the tree keeps a compact panel of its own at the top and the matrix follows below. Scrolling down pins the tree's controls under the navbar, then the category labels and matrix bar under them, then the matrix's column headings, so the matrix can be scrolled through without losing any controls (on phones, one panel at a time, switched with `Tree / matrix`).
+- `Trait matrix ▸`, under the category labels, opens a table of every tool's compatibility data. While it's open, the tree keeps a compact panel of its own at the top and the matrix follows below. Scrolling down pins the tree's controls under the navbar, then the category labels and matrix bar under them, then the matrix's column headings, so the matrix can be scrolled through without losing any controls (on phones, one panel at a time: opening the tree or the matrix collapses the other).
 - Columns:
   - **Latest release:** version and date (green when released in the last 90 days)
   - **Depends on:** each dependency with its latest version, green when it was released in the last 90 days (dashed for soft references)
   - **Depended on by:** count; hover for names
   - **Readiness**, for the selected source: the tool's own status, the dependencies holding it back (`blocked by …`), and how many dependencies have no information
-  - **Capabilities**, grouped from the CIPs a tool names (wallet connection, token metadata, governance, blueprints, message signing); hover for which CIPs, click one to filter the matrix to every tool with it
+  - **Traits:** the tool's language and interface, license, and Cardano capabilities (CIPs grouped into wallet connection, token metadata, governance, blueprints, message signing). These come from different sources; see *Traits: what the matrix mixes* below. `Trait kinds`, at the right end of the matrix bar, picks which kinds are shown (Language and Cardano capability by default). Hover a trait for its source, click it to filter the matrix to every tool with it; traits of different kinds combine (e.g. TypeScript tools with governance), a second one of the same kind replaces the first, and clicking an active one removes it
   - **Health:** active, stale (no commits for a year), pre-release (no stable release among the last 10), archived
 - Click a column header to sort; type in `Filter tools…` to search by name. The category labels filter the matrix too.
-- Every tool, in the tree and the matrix, has two icons on hover: the magnifier filters the matrix to **that tool only**, and the branch icon to **that tool and its branch**: everything it depends on in `Dependencies` mode, or everything that depends on it in `Dependents` mode (`Soft refs` included when on). The chip in the matrix bar shows the filter (a tool, a branch or a capability); `×` clears it, as does clicking a category. Choosing a tool also brings it into view in the tree, expanding its parents if needed.
+- Every tool, in the tree and the matrix, has two icons on hover: the magnifier filters the matrix to **that tool only**, and the branch icon to **that tool and its branch**: everything it depends on in `Dependencies` mode, or everything that depends on it in `Dependents` mode (`Soft refs` included when on). The chip in the matrix bar shows the filter (a tool, a branch, or traits); `×` clears it, as does clicking a category. Choosing a tool also brings it into view in the tree, expanding its parents if needed.
 
 ### Readiness sources
 
@@ -42,11 +42,32 @@ The `Readiness` selector in the matrix bar picks where readiness comes from. Bot
 | **Repos · Conway (detected)** (default) | Conway, the current era | From each repository: naming Conway, Plutus V3 or a Conway governance CIP; plus curated corrections | `✓` ready, `✗` not ready, `?` unknown; `*` = curated |
 | **Intersect tracker · Dijkstra (PV12)** | Dijkstra, the next hard fork (protocol version 12) | Synced from [Intersect's readiness tracker](https://docs.google.com/spreadsheets/d/1C1Ai_YTqwKLHtICunzbh_o0FD9XB54Kh/edit?usp=sharing), where each team self-reports per network | `ready`, `in progress`, `reached out`, `n/a`, or none; per network (Musashi, DijkstraNet, Preview, PreProd, Mainnet; Mainnet by default, as Intersect counts it) |
 
-The tracker is filled in as teams report, so early in a hard fork cycle most tools show no information there. A link next to the selector opens the tracker, with the date of the last sync.
+The tracker is filled in as teams report, so early in a hard fork cycle most tools show no information there. `Tracker ↗` next to the selector opens the tracker; hover it for the date of the last sync. The network selector next to it picks the network.
 
 ### Sharing a view
 
-The view is in the URL, e.g. `/tools-rels-compat/?tool=Kupo&branch=1&matrix=1&source=intersect&net=preview`, or `?cap=governance` for a capability (`tree=0` keeps the tree collapsed).
+The view is in the URL, e.g. `/tools-rels-compat/?tool=Kupo&branch=1&matrix=1&source=intersect&net=preview`, or `?cap=governance` for a trait filter (`tree=0` keeps the tree collapsed).
+
+- Trait filters, one parameter per kind: `lang` (e.g. `typescript`), `iface` (e.g. `graphql`), `license` (an SPDX id such as `Apache-2.0`, or `unknown`, `none`, `no-repo`) and `cap` (`wallet`, `tokens`, `governance`, `blueprint`, `signing`). Several combine: `?lang=typescript&cap=governance`.
+- `kinds` lists the trait kinds shown, e.g. `kinds=lang,license,cap`; left out, it's the default (`lang,cap`). A kind with a filter in the URL is always shown.
+
+### Traits: what the matrix mixes
+
+In the data, a *trait* is narrow: `releases[].traits` holds the Cardano standards (CIPs, era names, `plutus-v3`) the enrichment script detected in a release's manifests and README. The matrix's **Traits** column is broader: it also shows the tool's language, interface and license, so a builder can read them alongside its capabilities. Those three aren't traits in the data's sense, aren't detected from code, and aren't stored in `releases[].traits`; they're only labelled traits in the interface, and are combined with the detected ones when the matrix is drawn.
+
+| Kind | Source | Describes | Maintained by | Changes when |
+|---|---|---|---|---|
+| **Language**, **Interface** | `properties` in the upstream catalog (`tools.js`), from the fixed lists in `tags.js` | The tool as a whole | Portal maintainers, through reviewed PRs | Someone edits the catalog entry |
+| **License** | `license` of the latest release in `enriched-tools.js`, which the script reads from GitHub's repository metadata | The repository, today | The tool's authors (their LICENSE file, as GitHub identifies it) | The script is re-run |
+| **Cardano capability** | `traits` of the latest release in `enriched-tools.js`, grouped into capabilities by the page | One release | Detected by the script; not reviewed | The script is re-run, or a new release ships |
+
+Notes:
+
+- **Language means the language you work in**, as the catalog defines it: Pebble is TypeScript because it's embedded in TypeScript. The script doesn't detect languages, so the catalog stays the only source and the two can't disagree.
+- **License values:** the SPDX id as GitHub reports it; `unknown license` when GitHub can't identify the license (`NOASSERTION`, usually a custom license); `no license detected` when the repository has none GitHub recognizes; `no public repo` when the tool lists no repository.
+- **Open source, compared with the portal:** the portal's tool pages show an "Open Source" badge whenever a tool has a `repository` link (94 of 103 tools at the last refresh). The license data is stricter: 82 tools have a standard open-source license (Apache-2.0, MIT, MPL-2.0, BSD-3-Clause, GPL-3.0, AGPL-3.0), one is CC-BY-4.0, 3 have an unidentified license and 8 with a repository have none detected. The matrix shows the license and doesn't call anything open source; the gap could be raised upstream.
+- **Capabilities can lag or miss:** a capability is shown only when a CIP is named in the manifests or README, so an empty cell means *no evidence*, not *no support*.
+
 
 ## Portal files added or changed
 
