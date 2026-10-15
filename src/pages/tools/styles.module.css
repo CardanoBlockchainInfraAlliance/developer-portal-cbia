@@ -122,6 +122,12 @@ html[data-theme="dark"] .searchInput:focus-visible {
   margin-bottom: 1rem;
 }
 
+/* A button at the right end of a section header (wraps under it when narrow) */
+.headerAction {
+  margin-left: auto;
+  align-self: center;
+}
+
 /* The template's section title: 36px Chivo Light in Obsidian. */
 .sectionTitle {
   margin: 0;

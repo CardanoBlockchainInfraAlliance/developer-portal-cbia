@@ -7,7 +7,7 @@ This fork of the [Cardano Developer Portal](https://developers.cardano.org/tools
 - **Two readiness sources:** detected from each tool's repository (default), or Intersect's hand-maintained hard fork readiness tracker, both laid over the same dependency graph
 - **Data refreshed by script** from GitHub and from Intersect's tracker, with a reviewed file for corrections that can't be detected
 
-[Running demo](https://45b.io/cbia-infra-tools-ms3/tools-rels-compat/), opened from the portal's tools page with the "Explore relationships and compatibility" button.
+[Running demo](https://45b.io/cbia-infra-tools-ms3/tools-rels-compat/), opened from the portal's tools page with the "Explore relationships and compatibility" button. The same view without the portal's navbar, hero and footer is at `/tools-rels-compat/standalone/` ("Open without the portal layout" on the page), and takes the same URL parameters.
 
 ## UI usage
 
@@ -18,6 +18,7 @@ This fork of the [Cardano Developer Portal](https://developers.cardano.org/tools
 - `Soft refs` adds documented integrations (a tool's README naming another) to the hard dependencies found in manifests.
 - Click a tool to expand or collapse it; Ctrl+click expands it fully. `Expand all` / `Collapse all` do the whole tree.
 - Click a category label at the bottom to show only that category; Ctrl+click adds more.
+- The grip at the right end of the category labels resizes the tree: drag it (or focus it and use the arrow keys, Shift for bigger steps), and the tree scrolls inside the new height. Double-click it to go back to the default. The height is remembered in your browser.
 - Each tool shows its readiness for the selected source (e.g. `✓` Conway-ready, or `in progress` on the Intersect tracker), and a red `blocked` when one of its dependencies is behind (hover for which). Hover a tool for its maker and description.
 
 ### Trait matrix
@@ -27,28 +28,32 @@ This fork of the [Cardano Developer Portal](https://developers.cardano.org/tools
   - **Latest release:** version and date (green when released in the last 90 days)
   - **Depends on:** each dependency with its latest version, green when it was released in the last 90 days (dashed for soft references)
   - **Depended on by:** count; hover for names
-  - **Readiness**, for the selected source: the tool's own status, the dependencies holding it back (`blocked by …`), and how many dependencies have no information
+  - **Readiness**, for the selected source: the tool's own status, the dependencies holding it back (`blocked by …`), and how many dependencies have no information. Click a status (in the matrix or the tree) to filter the matrix to every tool with it, e.g. every Dijkstra-ready tool; it combines with trait filters, and clicking it again removes it
   - **Traits:** the tool's language and interface, license, and Cardano capabilities (CIPs grouped into wallet connection, token metadata, governance, blueprints, message signing). These come from different sources; see *Traits: what the matrix mixes* below. `Trait kinds`, at the right end of the matrix bar, picks which kinds are shown (Language and Cardano capability by default). Hover a trait for its source, click it to filter the matrix to every tool with it; traits of different kinds combine (e.g. TypeScript tools with governance), a second one of the same kind replaces the first, and clicking an active one removes it
-  - **Health:** active, stale (no commits for a year), pre-release (no stable release among the last 10), archived
+  - **Health:** active, stale (no commits for a year), pre-release (no stable release among the last 10), archived, no repo (no public repository to read it from)
 - Click a column header to sort; type in `Filter tools…` to search by name. The category labels filter the matrix too.
 - Every tool, in the tree and the matrix, has two icons on hover: the magnifier filters the matrix to **that tool only**, and the branch icon to **that tool and its branch**: everything it depends on in `Dependencies` mode, or everything that depends on it in `Dependents` mode (`Soft refs` included when on). The chip in the matrix bar shows the filter (a tool, a branch, or traits); `×` clears it, as does clicking a category. Choosing a tool also brings it into view in the tree, expanding its parents if needed.
 
 ### Readiness sources
 
-The `Readiness` selector in the matrix bar picks where readiness comes from. Both use the same dependency graph, so `blocked` means the same thing in each: a hard dependency is known to be less than ready.
+The `Readiness` selector in the matrix bar picks where readiness comes from. All use the same dependency graph, so `blocked` means the same thing in each: a hard dependency is known to be less than ready.
 
 | Source | Era | How it's gathered | Values |
 |---|---|---|---|
-| **Repos · Conway (detected)** (default) | Conway, the current era | From each repository: naming Conway, Plutus V3 or a Conway governance CIP; plus curated corrections | `✓` ready, `✗` not ready, `?` unknown; `*` = curated |
+| **Repos · Conway (detected)** | Conway, the current era | From each repository: naming Conway, Plutus V3 or a Conway governance CIP; plus curated corrections | `✓` ready, `✗` not ready, `?` unknown; `*` = curated |
+| **Repos · Dijkstra (detected)** (default) | Dijkstra, the next hard fork (protocol version 12) | From each repository: naming Dijkstra, Plutus V4 or a Dijkstra ledger CIP a tool would implement (CIP-112 guard scripts, CIP-118 nested transactions, CIP-159 account addresses, CIP-167, CIP-176); plus curated corrections | as for Conway |
 | **Intersect tracker · Dijkstra (PV12)** | Dijkstra, the next hard fork (protocol version 12) | Synced from [Intersect's readiness tracker](https://docs.google.com/spreadsheets/d/1C1Ai_YTqwKLHtICunzbh_o0FD9XB54Kh/edit?usp=sharing), where each team self-reports per network | `ready`, `in progress`, `reached out`, `n/a`, or none; per network (Musashi, DijkstraNet, Preview, PreProd, Mainnet; Mainnet by default, as Intersect counts it) |
+
+The two Dijkstra sources answer different questions: the detected one is evidence in the code that a tool is working on the era; the tracker is what each team says about its release. The [Dijkstra upgrade overview](https://cardanoupgrades.docs.intersectmbo.org/dijkstra-era-upgrade) lists the era's CIPs. Its consensus and parameter changes (Leios, Peras, staking rewards, fees) don't count as evidence, since a tool gets them from the node. Mentions of "Dijkstra's algorithm" aren't counted as the era.
 
 The tracker is filled in as teams report, so early in a hard fork cycle most tools show no information there. `Tracker ↗` next to the selector opens the tracker; hover it for the date of the last sync. The network selector next to it picks the network.
 
 ### Sharing a view
 
-The view is in the URL, e.g. `/tools-rels-compat/?tool=Kupo&branch=1&matrix=1&source=intersect&net=preview`, or `?cap=governance` for a trait filter (`tree=0` keeps the tree collapsed).
+The view is in the URL, e.g. `/tools-rels-compat/?tool=Kupo&branch=1&matrix=1&source=intersect&net=preview` (`source=repos` for detected Conway readiness; left out, it's the default, detected Dijkstra), or `?cap=governance` for a trait filter (`tree=0` keeps the tree collapsed).
 
 - Trait filters, one parameter per kind: `lang` (e.g. `typescript`), `iface` (e.g. `graphql`), `license` (an SPDX id such as `Apache-2.0`, or `unknown`, `none`, `no-repo`) and `cap` (`wallet`, `tokens`, `governance`, `blueprint`, `signing`). Several combine: `?lang=typescript&cap=governance`.
+- Readiness filter: `ready` (`ready`, `not`, `none` for no info, and on the tracker `progress`, `early` for reached out), for the selected source, e.g. `?ready=ready&source=repos`.
 - `kinds` lists the trait kinds shown, e.g. `kinds=lang,license,cap`; left out, it's the default (`lang,cap`). A kind with a filter in the URL is always shown.
 
 ### Traits: what the matrix mixes
@@ -57,13 +62,13 @@ In the data, a *trait* is narrow: `releases[].traits` holds the Cardano standard
 
 | Kind | Source | Describes | Maintained by | Changes when |
 |---|---|---|---|---|
-| **Language**, **Interface** | `properties` in the upstream catalog (`tools.js`), from the fixed lists in `tags.js` | The tool as a whole | Portal maintainers, through reviewed PRs | Someone edits the catalog entry |
+| **Language**, **Interface** | `properties` in the upstream catalog (`tools.js`), from the fixed lists in `tags.js`; for tools added from the DevX map, the map's languages, with extra ones from `enriched-tags.js` | The tool as a whole | Portal maintainers, through reviewed PRs; DevX for the added tools | Someone edits the catalog entry, or the map changes and the script is re-run with `--extra-from-devex` |
 | **License** | `license` of the latest release in `enriched-tools.js`, which the script reads from GitHub's repository metadata | The repository, today | The tool's authors (their LICENSE file, as GitHub identifies it) | The script is re-run |
 | **Cardano capability** | `traits` of the latest release in `enriched-tools.js`, grouped into capabilities by the page | One release | Detected by the script; not reviewed | The script is re-run, or a new release ships |
 
 Notes:
 
-- **Language means the language you work in**, as the catalog defines it: Pebble is TypeScript because it's embedded in TypeScript. The script doesn't detect languages, so the catalog stays the only source and the two can't disagree.
+- **Language means the language you work in**, as the catalog defines it: Pebble is TypeScript because it's embedded in TypeScript. The script doesn't detect languages: each tool has one source, the catalog, or the DevX map for tools added from it, so the two can't disagree. The DevX map's languages aren't reviewed by portal maintainers, and may not always follow the same rule.
 - **License values:** the SPDX id as GitHub reports it; `unknown license` when GitHub can't identify the license (`NOASSERTION`, usually a custom license); `no license detected` when the repository has none GitHub recognizes; `no public repo` when the tool lists no repository.
 - **Open source, compared with the portal:** the portal's tool pages show an "Open Source" badge whenever a tool has a `repository` link (94 of 103 tools at the last refresh). The license data is stricter: 82 tools have a standard open-source license (Apache-2.0, MIT, MPL-2.0, BSD-3-Clause, GPL-3.0, AGPL-3.0), one is CC-BY-4.0, 3 have an unidentified license and 8 with a repository have none detected. The matrix shows the license and doesn't call anything open source; the gap could be raised upstream.
 - **Capabilities can lag or miss:** a capability is shown only when a CIP is named in the manifests or README, so an empty cell means *no evidence*, not *no support*.
@@ -75,12 +80,15 @@ Notes:
 |---|---|
 | `/src/components/BuilderToolsTree/index.js`, `tree.css` | The tree, trait matrix, readiness model and filters |
 | `/src/pages/tools-rels-compat/index.js` | The new page |
+| `/src/pages/tools-rels-compat/standalone.js` | The same view without the portal layout |
 | `/src/pages/tools/index.js` | "Explore relationships and compatibility" link next to "View all tools alphabetically" (in `AllToolsReveal`) |
 | `/src/pages/tools/styles.module.css` | Breadcrumb styles (used by the new page) and a gap between the two buttons above |
 | `/scripts/analyze-builder-tools.mjs` | GitHub enrichment; see *Data enriching* |
 | `/scripts/sync-intersect-readiness.mjs` | Intersect tracker sync; see *Readiness from Intersect's tracker* |
 | `/src/data/builder-tools/enriched-tools.js` (`.json`) | Enriched tool data (generated) |
 | `/src/data/builder-tools/enriched-overrides.js` | Curated corrections (hand-edited) |
+| `/src/data/builder-tools/enriched-tags.js` | This fork's taxonomy additions: the `l2` category and the extra languages (hand-edited; `tags.js` stays upstream's) |
+| `/src/data/builder-tools/devx-cardano-graph.json` | Snapshot of IOG DevX's tooling map, the copy last used by `--extra-from-devex` (generated) |
 | `/src/data/builder-tools/intersect-readiness.js` | Tracker statuses mapped to portal tools (generated) |
 | `/src/data/builder-tools/tools-rels-compat.html` | Initial stand-alone proof of concept |
 | `package.json` | `enrich-tools` and `sync-readiness` scripts |
@@ -92,6 +100,7 @@ The tree's category colours and legend (`CATEGORY_COLORS`, `BUILDER_TOOLS_CATS`,
 `scripts/analyze-builder-tools.mjs` reads the portal's builder-tools list and writes a copy of it in which every tool gets a `releases` array (versions, stars, license, Cardano era, dependencies on other listed tools, soft references, CIP/era traits), pulled from GitHub.
 
 - Input: `/src/data/builder-tools/tools.js` (upstream list) or `/src/data/builder-tools/enriched-tools.js` (a previous run's output)
+- Extra tools (optional): IOG DevX's [Cardano tooling map](https://github.com/input-output-hk/devx-updates/blob/main/data/cardano-graph.json), with `--extra-from-devex` (see *Extra tools from the DevX map* below)
 - Manual corrections: `/src/data/builder-tools/enriched-overrides.js` (see *Manual overrides* below)
 - Output: `/src/data/builder-tools/enriched-tools.js`, imported by `/src/components/BuilderToolsTree`, plus an `enriched-tools.json` copy of the same data (not used by the site; useful only for human data review)
 - No `npm install` needed, only Node.js 18+
@@ -99,14 +108,14 @@ The tree's category colours and legend (`CATEGORY_COLORS`, `BUILDER_TOOLS_CATS`,
 ### 0. Script overview
 
 - **Script:** the input file is imported through a temporary `.mjs` copy (deleted afterwards), so it can keep its `.js` extension. The input's comment header and "ADD YOUR BUILDER TOOL ABOVE THIS LINE" marker are carried over to the output, and only `releases` is regenerated. A tool keeps its previous `releases` when it has no `repository`, or when fetching its GitHub metadata, releases list or manifest files fails.
-- **Dependency detection:** for each tool, the script reads the root manifests (`package.json`, `cabal.project`, `Cargo.toml`, `go.mod`, `pom.xml`, Gradle files, `pyproject.toml`, `requirements.txt`, `pnpm-lock.yaml`), the monorepo sub-package manifests under `packages/`, `modules/`, `libs/` etc., and the `README.md`. In manifests, it looks for other listed tools by GitHub slug (`owner/repo`) and by package name, using per-ecosystem lookup tables (npm, Go, Maven, Rust crates, Haskell, Python) near the top of the script. Matches there become `dependencies`. A tool that is only mentioned in the README becomes a `softReference` instead.
-- **Traits:** era names, `plutus-v3`, and notable CIPs (`cip30`, `cip68`, `cip1694`…) found in the manifests and README. The latest release also gets `conwayReady: true` when its traits show Conway support (the `conway` era, `plutus-v3`, or a Conway governance CIP); it's left out when there's no evidence, meaning *unknown*. The page groups CIPs into capabilities (wallet connection, token metadata, governance, blueprints, message signing).
+- **Dependency detection:** each tool's manifests and README are searched for the other listed tools, by repository and by package name. A match in a manifest is a `dependency`, a match only in the README a `softReference`. See *How dependencies are asserted* below for the full rules and their limits.
+- **Traits:** era names, `plutus-v3`, and notable CIPs (`cip30`, `cip68`, `cip1694`…) found in the manifests and README. The latest release also gets `conwayReady: true` when its traits show Conway support (the `conway` era, `plutus-v3`, or a Conway governance CIP); it's left out when there's no evidence, meaning *unknown*. `dijkstraReady: true` works the same way for the next era (the `dijkstra` era, `plutus-v4`, or a Dijkstra ledger CIP). `CIP-0118` and `CIP-118` are read as the same CIP. The page groups CIPs into capabilities (wallet connection, token metadata, governance, blueprints, message signing).
 - **Releases:** up to the 10 most recent GitHub releases are listed, or a single synthetic `tip` entry when the repo has no formal releases. The entry marked `latest` is the newest stable release, as on GitHub (the newest prerelease only if all listed releases are prereleases). Only the latest entry carries the repo-level data (stars, forks, open issues, license, archived, last commit, Cardano era, `dependencies`, `softReferences`) and traits detected from the current manifests and README. Older entries only have version, tag, date, and traits detected from that release's notes. Their dependencies aren't recorded, since that would require reading old manifests.
 - **Shared repos:** when several tools share one repository (cardano-node and cardano-testnet; cardano-api, cardano-rpc and cardano-wasm), they all get that repo's releases, and a dependency on the repo is credited to the tool named after it.
 
 ### 1. Create a GitHub token
 
-The script only reads public repository data. Without a token, GitHub allows 60 API requests per hour, and a full run needs around 4 per tool (about 350 for the current list), so in practice a token is required. With a token the limit is 5000 per hour.
+The script only reads public repository data. Without a token, GitHub allows 60 API requests per hour, and a full run needs around 4 per tool (about 350 for the current list), so the script requires a token and stops without one (except with `--offline`). With a token the limit is 5000 per hour.
 
 Create a **fine-grained personal access token** at GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → *Generate new token*:
 
@@ -141,7 +150,7 @@ npm run enrich-tools        # or: yarn enrich-tools
 **Rebuild from the upstream list** (after merging upstream changes to `tools.js`, e.g. new or edited tools):
 
 ```bash
-npm run enrich-tools -- -i src/data/builder-tools/tools.js -r src/data/builder-tools/enriched-tools.js
+npm run enrich-tools -- -i src/data/builder-tools/tools.js -r src/data/builder-tools/enriched-tools.js --extra-from-devex
 ```
 
 `-r` carries over the current `releases` (matched by title) for tools without a `repository` and for tools whose GitHub fetch fails, so hand-curated entries aren't lost.
@@ -165,12 +174,25 @@ A run takes several minutes (it pauses between requests and waits out GitHub rat
 | `-i`, `--input <file>` | `tools.js` (in the current directory) | The builder-tools file to read. **Always pass it from the repo root**, since there is no `tools.js` there. Choosing the input is what picks the mode: `tools.js` starts from the upstream list; `enriched-tools.js` refreshes a previous output. |
 | `-o`, `--out <basename>` | `enriched-tools` (in the current directory) | Output path **without extension**; the script writes `<basename>.js` and `<basename>.json`. Point it at `src/data/builder-tools/enriched-tools` to update what the site uses, or elsewhere (e.g. `/tmp/enriched-tools`) for a trial run that leaves the repo untouched. |
 | `-r`, `--releases-from <file>` | | A previous output whose `releases` (matched by title) are used for any tool the input has none for: tools without a `repository`, tools whose GitHub fetch fails, and every tool with `--offline`. Meant for rebuilding from `tools.js`; in refresh mode the input already has them. |
+| `--extra-from-devex [<url\|file>]` | the DevX map's URL on GitHub | Add the tools in IOG DevX's map that the input doesn't list. A URL is fetched and saved as `devx-cardano-graph.json`; with `--offline`, that snapshot is read instead. A file path is read as is. See *Extra tools from the DevX map*. |
 | `--offline` | | Make no GitHub requests: only re-read the input (and `-r` file), apply the overrides and rewrite the output. |
 | `--overrides <file>` | `src/data/builder-tools/enriched-overrides.js` (found relative to the script) | Manual corrections file; skipped if it doesn't exist. |
 | `-t`, `--token <PAT>` | `$GITHUB_TOKEN` | GitHub token. Prefer the environment variable (see step 2). |
 | `-h`, `--help` | | Print usage and exit. |
 
 With `npm run`, arguments after `--` are appended to the script's own, and a repeated flag overrides the earlier one, which is how `-- -i ...tools.js` switches the input.
+
+### Extra tools from the DevX map
+
+IOG's DevX initiative keeps a [map of Cardano developer tooling](https://github.com/input-output-hk/devx-updates/blob/main/data/cardano-graph.json) (about 270 tools, against the portal's 100 or so). `--extra-from-devex` adds the tools it has and the input doesn't, so the tree and matrix cover the wider ecosystem:
+
+- **Only the list is taken:** name, description, website, docs, repository, category and languages. The map's dependency edges aren't used: added tools get their `releases` and dependencies from GitHub like every other tool.
+- **Matching:** a map tool is already listed when its name matches a tool's title (ignoring case, punctuation and parentheses, so "Plinth (Plutus Tx)" is Plinth), or its repository does (`input-output-hk/` and `IntersectMBO/` count as the same org). A repository the map gives several tools (cardano-node, cardano-submit-api and cardano-testnet) is matched by name only.
+- **Portal tools win:** a tool in both keeps its portal entry untouched. Added ones are marked `source: "devx"` (with the map's `devxId`), are listed after the portal's, and have no "Tool page" link in the tree, since the portal has no page for them.
+- **Categories:** mapped to the portal's (`infra` becomes Integration & Middleware; `node` and `dev` are split by the map's role into Nodes & Clients / Node Access & RPC and Developer Environments / Testing & Debugging). Layer 2 & Scaling (`l2`) has no portal equivalent and is a category of its own in this view.
+- **Languages:** mapped to the portal's language and interface properties (C# to .NET, as the portal files it). Real languages the portal doesn't list (Aiken, Kotlin, Solidity, UPLC…) are added by this fork in `/src/data/builder-tools/enriched-tags.js`. The map's other values (Multi, Service, JSON, Vue…) aren't languages and are left out; each run lists them. A mapping to a value in neither file stops the run.
+- **Everything is kept,** including end-user wallets, hosted services, and abandoned or archived tools. Tools with no public repository show `no repo` under Health and `no public repo` under License.
+- **Re-runs:** with the flag, added tools are dropped and re-derived from the map, keeping their `releases`, so a tool that has since joined `tools.js` isn't listed twice. Without it, a refresh keeps them as they are.
 
 ### Manual overrides
 
@@ -200,6 +222,44 @@ The output is written in the same format as `tools.js` (same comment header, sam
 - If GitHub can't be reached for a tool (metadata, releases list, or all manifest files fail), that tool's previous `releases` are kept instead of being emptied.
 
 Refresh mode only knows about the tools already in `enriched-tools.js`. To pick up tools added or edited upstream in `tools.js`, use the *rebuild from upstream* command. Nothing is lost by doing so: `releases` comes from GitHub on every run either way, and `-r` brings over the hand-curated `releases` on tools with no repository (e.g. Maestro), which only exist in `enriched-tools.js`. A tool renamed upstream doesn't match by title, so check its `releases` in the diff.
+
+### How dependencies are asserted
+
+A dependency in this data means: *this tool's current code names that other listed tool*. It's read from text in the repository; nothing is built, resolved or run, and nothing is taken from another dataset (the DevX map's dependency edges aren't used).
+
+**1. What's read.** For each tool with a GitHub `repository`, on its default branch, as it is at the time of the run:
+
+- Root manifests: `package.json`, `pnpm-lock.yaml`, `cabal.project`, `stack.yaml`, `Cargo.toml`, `go.mod`, `pom.xml`, `build.gradle`, `build.gradle.kts`, `pyproject.toml`, `requirements.txt`.
+- Monorepo sub-package manifests one level under `packages/`, `subprojects/`, `modules/`, `libs/`, `projects/`, `apps/` or `integrations/` (`package.json`, `Cargo.toml`, `pom.xml`, Gradle files), up to 40 per repository. When GitHub truncates a large repository's file listing, those directories are listed separately so they aren't missed.
+- The root `README.md`.
+
+Haskell `.cabal` files, nested manifests deeper than one level, other branches and old tags aren't read.
+
+**2. What counts as a match.** Only tools on the list can be matched; anything else a tool uses is ignored. A tool never matches itself. Two kinds of match:
+
+| Match | Where | Rule |
+|---|---|---|
+| **Repository** | Any file read | Another tool's GitHub `owner/repo` appears as a whole (case-insensitive): `MeshJS/mesh` doesn't match `MeshJS/mesh-contracts`. This catches `cabal.project` `source-repository-package` entries, `go.mod` module paths, git dependencies in `Cargo.toml` or `package.json`, and links. |
+| **Package name** | Manifests only (the README is only searched for repositories) | A name from the lookup tables near the top of the script, per ecosystem: npm (the name in quotes, e.g. `"@meshsdk/core"`), Go (the module path), Maven (`group:artifact` prefix), Rust crates (`pallas = …` or `"pallas"`), Haskell and Python (the package name as a word). Each name maps to the repository of the tool that publishes it, e.g. `@cardano-ogmios/client` → Ogmios. |
+
+**3. Hard or soft.**
+
+- A match in any **manifest** is a hard dependency (`dependencies`). Every kind of dependency counts: runtime, dev, peer, test and lockfile entries alike.
+- A match only in the **README** is a soft reference (`softReferences`): the README links to or names the other tool's repository, usually a documented integration. A tool's name alone in the text ("works with Ogmios") isn't a match. A tool matched in both is only a hard dependency.
+- On the page, `blocked` and the readiness of what a tool depends on only follow hard dependencies; `Soft refs` adds soft references to the tree and the *Depends on* column.
+
+**4. Whose dependency.** A match is credited by repository. When several tools share one (cardano-node and cardano-testnet; cardano-api, cardano-rpc and cardano-wasm), it's credited to the tool named after the repository, else to the first one listed, never to all of them.
+
+**5. Which release.** Dependencies describe the default branch at the time of the run and are stored on the `latest` release only. Older releases have none, since that would mean reading their old manifests.
+
+**6. Corrections.** Anything detection gets wrong is fixed in `enriched-overrides.js`, with `dependencies: { add: [...], remove: [...] }` (or `softReferences`), and shows up in that release's `overridden` list. A curated dependency is removed from the soft references.
+
+**Limits, so the data is read for what it is:**
+
+- **Coverage depends on the lookup tables.** A tool is found by package name only if its packages are in the tables. Otherwise, only a repository match finds it, and a plain `"@scope/pkg": "^1.2"` line goes unnoticed. Tools added from the DevX map aren't in the tables yet, so dependencies *on* them are mostly found by repository.
+- **Text, not resolution:** a name in a comment or an unused manifest entry still counts, and only direct mentions are seen, not transitive dependencies. Haskell and Python names match as words, and `-` ends a word, so `cardano-api` also matches longer names that start with `cardano-api-`.
+- **Hosted services** (Blockfrost, Koios, Maestro) are used over HTTP, not as packages. Unless a client package or the repository is named, using them leaves no dependency, or only a soft reference.
+- **Without a GitHub repository,** a tool can't be detected at all: its own dependencies aren't read (it keeps any it had), and no other tool is found to depend on it, since both kinds of match lead to a repository. Such links only come from overrides. When a fetch fails, the tool keeps its previous dependencies.
 
 ## Readiness from Intersect's tracker
 

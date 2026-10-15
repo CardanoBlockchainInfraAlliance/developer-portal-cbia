@@ -6,6 +6,7 @@
  * Keyed by tool title, exactly as in tools.js.  Per field:
  *   field: value               replaces what was detected
  *                              (e.g. cardanoEra: "conway", conwayReady: false,
+ *                              dijkstraReady: true,
  *                              dependencies: [...])
  *   field: { add, remove }     edits a detected list
  *                              (e.g. dependencies: { add: ["Ogmios"] },

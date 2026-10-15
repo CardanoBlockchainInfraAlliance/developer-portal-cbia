@@ -242,7 +242,8 @@
 
 /* ---------- Legend ---------- */
 .btt-legend {
-  padding: 10px 20px;
+  position: relative;
+  padding: 10px 52px 10px 20px;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -730,6 +731,11 @@
 .btt-wrap .rd-early    { color: #79c0ff; border-color: rgba(121, 192, 255, 0.4); }
 .btt-wrap .rd-not      { color: #ff7b72; border-color: rgba(255, 123, 114, 0.45); }
 .btt-wrap .rd-none     { color: var(--text-dim); border-style: dashed; }
+/* Marks are buttons: clicking one filters the matrix to that readiness */
+.btt-wrap button.rd-mark { background-color: transparent; cursor: pointer; }
+.btt-wrap button.rd-ready { background-color: rgba(63, 185, 80, 0.07); }
+.btt-wrap button.rd-mark:hover { filter: brightness(1.25); border-style: solid; }
+.btt-wrap button.rd-mark.active { outline: 1px solid currentColor; outline-offset: 1px; }
 .btt-wrap .rd-mark.curated::after { content: "*"; font-size: 10px; vertical-align: super; color: var(--text-dim); }
 .btt-wrap .rd-blocked {
   display: inline-block;
@@ -767,3 +773,61 @@
 .btt-wrap .rd-control select[hidden] { display: none; }
 .btt-wrap .rd-link { font-size: 12px; color: var(--accent); white-space: nowrap; }
 .btt-wrap .rd-link[hidden] { display: none; }
+
+/* ---------- Standalone page (/tools-rels-compat/standalone/) ----------
+   No navbar above: controls pin to the top of the window, and the
+   component fills it edge to edge. */
+.btt-standalone {
+  --ifm-navbar-height: 0px;
+}
+.btt-standalone .btt-wrap {
+  min-height: 100vh;
+  border-radius: 0;
+}
+
+/* ---------- Tree height grip (right end of the category labels) ---------- */
+.btt-wrap .tree-resize {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: ns-resize;
+  touch-action: none;
+  color: var(--text-dim);
+}
+.btt-wrap .tree-resize:hover,
+.btt-wrap .tree-resize:focus-visible,
+.btt-wrap.tree-resizing .tree-resize { color: var(--text); border-color: var(--accent-dim); }
+/* Three grip lines */
+.btt-wrap .tree-resize span,
+.btt-wrap .tree-resize span::before,
+.btt-wrap .tree-resize span::after {
+  display: block;
+  width: 12px;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 1px;
+}
+.btt-wrap .tree-resize span { position: relative; }
+.btt-wrap .tree-resize span::before,
+.btt-wrap .tree-resize span::after { content: ""; position: absolute; left: 0; }
+.btt-wrap .tree-resize span::before { top: -4px; }
+.btt-wrap .tree-resize span::after { top: 4px; }
+.btt-wrap.tree-collapsed .tree-resize { display: none; }
+.btt-wrap.tree-resizing { user-select: none; cursor: ns-resize; }
+
+/* A dragged height replaces the default one in both layouts (matrix open or
+   closed); the tree then scrolls inside its panel */
+.btt-wrap.tree-sized .btt-main,
+.btt-wrap.tree-sized.matrix-open .btt-main {
+  height: var(--btt-tree-h);
+  min-height: 0;
+  overflow: auto;
+}

@@ -36,6 +36,7 @@
  *       softReferences: ["Kupo"],                ← documented integrations (README)
  *       traits: ["conway", "babbage", "plutus-v3", "cip30"],
  *       conwayReady: true                        ← only on latest; absent = unknown
+ *       dijkstraReady: true                      ← same, for the next era (Dijkstra)
  *     },
  *     {
  *       version: "6.8.0",                        ← older releases: no deps
@@ -46,7 +47,7 @@
  *
  * Usage:
  *   GITHUB_TOKEN=ghp_xxx node scripts/analyze-builder-tools.mjs [--input tools.js] [--out enriched-tools]
- *     [--releases-from enriched-tools.js] [--offline] [--overrides <file>]
+ *     [--releases-from enriched-tools.js] [--extra-from-devex [<url|file>]] [--offline] [--overrides <file>]
  *   (see README.CBIA.md for the `yarn enrich-tools` / `npm run enrich-tools` shortcut)
  *
  * Hand-curated corrections live in src/data/builder-tools/enriched-overrides.js
@@ -61,12 +62,29 @@ import { pathToFileURL, fileURLToPath } from "url";
 import { resolve, join, dirname } from "path";
 import { tmpdir } from "os";
 
+// IOG DevX's Cardano tooling map: a wider list of tools than the portal's
+// tools.js, read by --extra-from-devex.  Fetching it saves a snapshot next to
+// the other builder-tools data, so the copy last used is kept for reference
+// and --offline runs can read it.
+const DEVX_DEFAULT_URL = "https://github.com/input-output-hk/devx-updates/blob/main/data/cardano-graph.json";
+const DEVX_SNAPSHOT = resolve(dirname(fileURLToPath(import.meta.url)), "../src/data/builder-tools/devx-cardano-graph.json");
+
+// --extra-from-devex takes an optional value (a URL or a file), which
+// parseArgs can't express: given bare, fill in the default URL.
+const argv = process.argv.slice(2);
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--extra-from-devex" && (i + 1 === argv.length || argv[i + 1].startsWith("-")))
+    argv.splice(i + 1, 0, DEVX_DEFAULT_URL);
+}
+
 const { values: args } = parseArgs({
+  args: argv,
   options: {
     token: { type: "string", short: "t" },
     out:   { type: "string", short: "o", default: "enriched-tools" },
     input: { type: "string", short: "i", default: "tools.js" },
     "releases-from": { type: "string", short: "r" },
+    "extra-from-devex": { type: "string" },
     offline: { type: "boolean" },
     overrides: { type: "string" },
     help:  { type: "boolean", short: "h" },
@@ -74,11 +92,17 @@ const { values: args } = parseArgs({
 });
 if (args.help) {
   console.log("Usage: node analyze-builder-tools.mjs [--token <PAT>] [--input <file>] [--out <basename>]\n" +
-              "         [--releases-from <file>] [--offline] [--overrides <file>]");
+              "         [--releases-from <file>] [--extra-from-devex [<url|file>]] [--offline] [--overrides <file>]");
   process.exit(0);
 }
 
 const GITHUB_TOKEN = args.token ?? process.env.GITHUB_TOKEN ?? "";
+// Without a token GitHub allows 60 requests an hour, far short of a full run,
+// which would stall for hours on rate limits.  Stop before doing anything.
+if (!GITHUB_TOKEN && !args.offline) {
+  console.error("✗  No GitHub token: set GITHUB_TOKEN (see README.CBIA.md, step 2), or pass --offline. Nothing was done.");
+  process.exit(1);
+}
 const OUT_BASE     = args.out;
 const INPUT_FILE   = resolve(args.input);
 
@@ -104,7 +128,117 @@ async function loadModule(text) {
 }
 const loadBuilderTools = async text => (await loadModule(text)).BuilderTools;
 const inputText = readFileSync(INPUT_FILE, "utf8");
-const BuilderTools = await loadBuilderTools(inputText);
+const InputTools = await loadBuilderTools(inputText);
+
+// ─── --extra-from-devex: tools from IOG DevX's map that the input lacks ──────
+// Only the tool list is taken from the map (name, description, links,
+// category, languages); its dependency edges aren't used, since dependencies
+// are detected from each repository like every other tool's.  Added tools
+// carry `source: "devx"` and are listed after the input's.  On a re-run with
+// the flag they are dropped and re-derived from the map (keeping their
+// `releases`), so edits to the map reach them and tools that have since
+// joined tools.js aren't listed twice.
+const DEVX_CATEGORY = {
+  sc: "smart-contracts", sdk: "sdk", api: "api", idx: "indexer", l2: "l2",
+  wallet: "wallet", ops: "operations", gov: "governance", oracle: "oracle",
+  infra: "integration",
+  // Split by the map's role, to fit the portal's finer categories
+  node: n => n.role === "full-node" ? "node" : n.role === "wallet" ? "wallet" : "node-access",
+  dev: n => ["contract-testing", "contract-debugger", "inspector"].includes(n.role) ? "testing" : "dev-env",
+};
+// The map's languages → language and interface properties: the portal's
+// (tags.js), plus the languages this fork adds (enriched-tags.js).  Values that
+// aren't programming languages ("Multi", "Service", "JSON", "Vue"…) are left out.
+const DEVX_PROPERTY = {
+  "TypeScript": "typescript", "TS": "typescript", "JavaScript": "javascript", "JS": "javascript",
+  "Python": "python", "Rust": "rust", "Haskell": "haskell", "Java": "java", ".NET": "net",
+  "C#": "net", // the portal files C# tools under .NET
+  "Go": "golang", "Scala": "scala", "Scala 3": "scala", "C": "c", "PureScript": "purescript",
+  "Elm": "elm", "PHP": "php", "Swift": "swift",
+  "Aiken": "aiken", "Bash": "bash", "C++": "cpp", "Dart": "dart", "Elixir": "elixir",
+  "Kotlin": "kotlin", "Nix": "nix", "Pluto": "pluto", "Solidity": "solidity", "UPLC": "uplc",
+  "REST API": "rest", "REST": "rest", "gRPC spec": "grpc", "WS": "websocket",
+};
+// Categories and properties the mappings above may produce, so a typo in them
+// stops the run instead of writing a value the page doesn't know
+const TAGS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../src/data/builder-tools");
+async function loadValidTags() {
+  const tags  = await loadModule(readFileSync(join(TAGS_DIR, "tags.js"), "utf8"));
+  const extra = await loadModule(readFileSync(join(TAGS_DIR, "enriched-tags.js"), "utf8"));
+  return {
+    categories: new Set([...Object.keys(tags.Categories), ...Object.keys(extra.ExtraCategories)]),
+    properties: new Set([...Object.keys(tags.Properties), ...Object.keys(extra.ExtraLanguageProperties)]),
+  };
+}
+const normName = s => (s ?? "").toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]/g, "");
+// IOG repos moved from input-output-hk to IntersectMBO; GitHub redirects the
+// old slugs, so treat the two orgs as one when comparing repositories.
+const normSlug = s => s?.toLowerCase().replace(/^input-output-hk\//, "intersectmbo/") ?? null;
+const githubSlug = url => url?.match(/github\.com\/([^/]+\/[^/#?]+?)(?:\.git)?\/?$/)?.[1] ?? null;
+
+async function loadDevxGraph(source) {
+  if (!/^https?:/.test(source)) return JSON.parse(readFileSync(resolve(source), "utf8"));
+  if (args.offline) {
+    if (!existsSync(DEVX_SNAPSHOT)) throw new Error(`--offline needs a snapshot at ${DEVX_SNAPSHOT}; run once online first`);
+    console.log(`   --extra-from-devex: reading the snapshot ${DEVX_SNAPSHOT}`);
+    return JSON.parse(readFileSync(DEVX_SNAPSHOT, "utf8"));
+  }
+  // A github.com/…/blob/… page link is fetched from raw.githubusercontent.com
+  const url = source.replace(/^https:\/\/github\.com\/([^/]+\/[^/]+)\/blob\//, "https://raw.githubusercontent.com/$1/");
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`--extra-from-devex: HTTP ${res.status} from ${url}`);
+  const text = await res.text();
+  const graph = JSON.parse(text);
+  writeFileSync(DEVX_SNAPSHOT, text.endsWith("\n") ? text : text + "\n");
+  console.log(`   --extra-from-devex: fetched ${url} (generated ${graph.meta?.generated ?? "?"}), snapshot → ${DEVX_SNAPSHOT}`);
+  return graph;
+}
+
+function addDevxTools(inputTools, graph, valid) {
+  for (const p of new Set(Object.values(DEVX_PROPERTY)))
+    if (!valid.properties.has(p)) throw new Error(`DEVX_PROPERTY maps to "${p}", which isn't in tags.js or enriched-tags.js`);
+  const previous = Object.fromEntries(inputTools.filter(t => t.source === "devx").map(t => [t.title, t.releases]));
+  const tools = inputTools.filter(t => t.source !== "devx");
+  const names = new Set(tools.map(t => normName(t.title)));
+  const slugs = new Set(tools.map(t => normSlug(githubSlug(t.repository))).filter(Boolean));
+  // A repo the map gives several tools (Plutus Core and Plinth; cardano-node,
+  // cardano-submit-api and cardano-testnet) can't identify one of them, so
+  // those are matched by name only.
+  const repoCount = {};
+  for (const n of graph.nodes) if (n.repo) repoCount[normSlug(n.repo)] = (repoCount[normSlug(n.repo)] ?? 0) + 1;
+
+  const added = [], dropped = new Set();
+  for (const n of graph.nodes) {
+    const slug = normSlug(n.repo);
+    if (names.has(normName(n.name)) || (slug && repoCount[slug] === 1 && slugs.has(slug))) continue;
+    const category = typeof DEVX_CATEGORY[n.category] === "function" ? DEVX_CATEGORY[n.category](n) : DEVX_CATEGORY[n.category];
+    if (!category) { console.warn(`  ⚠  devx: "${n.name}" has unknown category "${n.category}", skipped`); continue; }
+    if (!valid.categories.has(category)) throw new Error(`DEVX_CATEGORY maps to "${category}", which isn't in tags.js or enriched-tags.js`);
+    const langs = [...new Set([...(n.languages ?? []), ...(n.devLangs ?? [])])];
+    for (const l of langs) if (!DEVX_PROPERTY[l]) dropped.add(l);
+    // `repoUrl` isn't always a repository (a docs page, a marketplace listing)
+    const repository = githubSlug(n.repoUrl) ? n.repoUrl : null;
+    const tool = {
+      title: n.name,
+      description: n.description,
+      website: n.website ?? (repository ? null : n.repoUrl) ?? n.docsUrl ?? null,
+      docs: n.docsUrl ?? null,
+      repository,
+      category,
+      properties: [...new Set(langs.map(l => DEVX_PROPERTY[l]).filter(Boolean))],
+      source: "devx",
+      devxId: n.id,
+    };
+    const releases = previous[n.name] ?? RELEASES_FROM[n.name];
+    if (releases) tool.releases = releases;
+    added.push(tool);
+    names.add(normName(n.name));
+  }
+  console.log(`   --extra-from-devex: ${graph.nodes.length} tools in the map, ${graph.nodes.length - added.length} already listed, ${added.length} added` +
+              ` (${added.filter(t => !t.repository).length} with no repository)`);
+  if (dropped.size) console.log(`   --extra-from-devex: values that aren't languages, left out: ${[...dropped].sort().join(", ")}`);
+  return [...tools, ...added];
+}
 
 // --releases-from: a previous output whose `releases` (matched by title) are
 // used wherever the input has none, i.e. when rebuilding from upstream
@@ -118,6 +252,10 @@ const RELEASES_FROM = args["releases-from"]
     )
   : {};
 const previousReleases = tool => tool.releases ?? RELEASES_FROM[tool.title] ?? [];
+
+const BuilderTools = args["extra-from-devex"]
+  ? addDevxTools(InputTools, await loadDevxGraph(args["extra-from-devex"]), await loadValidTags())
+  : InputTools;
 
 // --overrides: hand-curated corrections, keyed by tool title (see the comment
 // at the top of that file for the format).  Defaults to the repo's
@@ -493,16 +631,24 @@ function extractDepsFromTexts(textDocs, selfSlug) {
 }
 
 // ─── Cardano era + CIP trait detection ───────────────────────────────────────
-const ERA_TRAITS = ["byron", "shelley", "allegra", "mary", "alonzo", "babbage", "conway"];
+const ERA_TRAITS = ["byron", "shelley", "allegra", "mary", "alonzo", "babbage", "conway", "dijkstra"];
+// An era named as a word; for Dijkstra, not the shortest-path algorithm
+const eraRegex = era => era === "dijkstra"
+  ? /\bdijkstra\b(?!['’]s\b|\s+algorithm)/i
+  : new RegExp(`\\b${era}\\b`, "i");
 const CIP_RE = /\bCIP-?(\d+)\b/gi;
-// CIP numbers that appear frequently in Cardano tooling READMEs and are worth surfacing
+// CIP numbers that appear frequently in Cardano tooling READMEs and are worth
+// surfacing, plus the Dijkstra era's (112, 118, 159, 167, 176)
 const NOTABLE_CIPS = new Set([
   "1", "2", "3", "8", "9", "14", "19", "21", "25", "26", "27",
   "30", "31", "32", "33", "34", "36", "45", "50", "54", "57",
-  "67", "68", "86", "95", "100", "104", "105", "108", "119", "129", "1694",
+  "67", "68", "86", "95", "100", "104", "105", "108", "112", "118", "119", "129",
+  "159", "167", "176", "1694",
 ]);
-// Plutus V3 only exists from the Conway era on, so it's evidence of Conway support
+// Plutus V3 only exists from the Conway era on, so it's evidence of Conway
+// support; Plutus V4 comes with Dijkstra
 const PLUTUS_V3_RE = /\bplutus[\s_-]?v3\b/i;
+const PLUTUS_V4_RE = /\bplutus[\s_-]?v4\b/i;
 
 // Evidence that a tool supports the current (Conway) era: naming the era,
 // Plutus V3, or the Conway governance CIPs.  Absence means "unknown", not "no";
@@ -512,22 +658,39 @@ const CONWAY_EVIDENCE = new Set([
 ]);
 const isConwayReady = traits => (traits ?? []).some(t => CONWAY_EVIDENCE.has(t));
 
+// Evidence that a tool supports the next era, Dijkstra (protocol version 12):
+// naming the era, Plutus V4, or a Dijkstra CIP a tool would implement (CIP-112
+// guard scripts, CIP-118 nested transactions, CIP-159 account addresses,
+// CIP-167 no isValid, CIP-176 block body serialization; Intersect's Dijkstra
+// upgrade overview lists the era's scope).  The consensus and parameter CIPs
+// in that scope (Leios, Peras, staking rewards, fees) aren't evidence: a tool
+// gets them from the node.  Absence means "unknown", as for Conway.
+const DIJKSTRA_EVIDENCE = new Set([
+  "dijkstra", "plutus-v4", "cip112", "cip118", "cip159", "cip167", "cip176",
+]);
+const isDijkstraReady = traits => (traits ?? []).some(t => DIJKSTRA_EVIDENCE.has(t));
+// Each readiness flag on a latest release, and how it's detected
+const READINESS = { conwayReady: isConwayReady, dijkstraReady: isDijkstraReady };
+
 function detectTraits(texts) {
   const traits = new Set();
   for (const text of texts) {
     if (!text) continue;
     for (const era of ERA_TRAITS) {
-      if (new RegExp(`\\b${era}\\b`, "i").test(text)) traits.add(era);
+      if (eraRegex(era).test(text)) traits.add(era);
     }
     if (PLUTUS_V3_RE.test(text)) traits.add("plutus-v3");
+    if (PLUTUS_V4_RE.test(text)) traits.add("plutus-v4");
     let m;
     while ((m = CIP_RE.exec(text)) !== null) {
-      if (NOTABLE_CIPS.has(m[1])) traits.add(`cip${m[1]}`);
+      // CIP-0118 and CIP-118 are the same CIP
+      const n = String(parseInt(m[1], 10));
+      if (NOTABLE_CIPS.has(n)) traits.add(`cip${n}`);
     }
   }
-  // Return eras first (chronological), then Plutus V3, then CIPs (numeric)
+  // Return eras first (chronological), then Plutus versions, then CIPs (numeric)
   const eras = ERA_TRAITS.filter(e => traits.has(e));
-  const plutus = traits.has("plutus-v3") ? ["plutus-v3"] : [];
+  const plutus = ["plutus-v3", "plutus-v4"].filter(p => traits.has(p));
   const cips = [...traits].filter(t => t.startsWith("cip")).sort((a, b) => {
     return parseInt(a.slice(3)) - parseInt(b.slice(3));
   });
@@ -559,8 +722,6 @@ async function main() {
   console.log(`\n🔍 Enriching ${BuilderTools.length} builder-tool entries from ${args.input} (v3)…`);
   if (args.offline)
     console.log("   --offline: no GitHub requests, every tool keeps its previous releases.");
-  else if (!GITHUB_TOKEN)
-    console.warn("⚠  No GITHUB_TOKEN — rate limit: 60 req/hr. Will be slow.\n");
 
   const enriched = [];
 
@@ -708,14 +869,16 @@ async function main() {
     await new Promise(r => setTimeout(r, 400));
   }
 
-  // ─── Derived compatibility: conwayReady ───────────────────────────────────
+  // ─── Derived compatibility: conwayReady, dijkstraReady ────────────────────
   // Recomputed from the latest release's traits on every run (so it also works
-  // with --offline), before overrides, which can set it either way.
+  // with --offline), before overrides, which can set them either way.
   for (const t of enriched) {
     const latest = t.releases?.find(r => r.latest);
     if (!latest) continue;
-    if (isConwayReady(latest.traits)) latest.conwayReady = true;
-    else delete latest.conwayReady;
+    for (const [flag, isReady] of Object.entries(READINESS)) {
+      if (isReady(latest.traits)) latest[flag] = true;
+      else delete latest[flag];
+    }
   }
 
   // ─── Hand-curated overrides ───────────────────────────────────────────────
@@ -730,12 +893,15 @@ async function main() {
     }
   }
   for (let i = 0; i < enriched.length; i++) enriched[i] = applyOverrides(enriched[i]);
-  // Curated traits count as evidence too, unless conwayReady itself is curated
+  // Curated traits count as evidence too, unless the flag itself is curated
   for (const t of enriched) {
     const latest = t.releases?.find(r => r.latest);
-    if (!latest?.overridden?.includes("traits") || latest.overridden.includes("conwayReady")) continue;
-    if (isConwayReady(latest.traits)) latest.conwayReady = true;
-    else delete latest.conwayReady;
+    if (!latest?.overridden?.includes("traits")) continue;
+    for (const [flag, isReady] of Object.entries(READINESS)) {
+      if (latest.overridden.includes(flag)) continue;
+      if (isReady(latest.traits)) latest[flag] = true;
+      else delete latest[flag];
+    }
   }
   const isNoteOnly = ov => Object.keys(ov).every(k => k === "note");
   const applied = enriched.filter(t => OVERRIDES[t.title] && !isNoteOnly(OVERRIDES[t.title])).map(t => t.title);

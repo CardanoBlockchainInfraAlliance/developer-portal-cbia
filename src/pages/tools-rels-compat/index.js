@@ -34,6 +34,12 @@ export default function ToolsRelsCompat() {
           <span className={styles.sectionSubtitle}>
             Slicing and dicing the Cardano stack
           </span>
+          <Link
+            to="/tools-rels-compat/standalone/"
+            className={clsx("button button--outline button--primary button--sm", styles.headerAction)}
+          >
+            Open without the portal layout
+          </Link>
         </header>
         <BuilderToolsTree />
       </section>

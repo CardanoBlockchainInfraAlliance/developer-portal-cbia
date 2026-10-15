@@ -5,6 +5,7 @@ import { BuilderTools } from "@site/src/data/builder-tools/enriched-tools.js";
 import { IntersectReadiness } from "@site/src/data/builder-tools/intersect-readiness.js";
 import { slugify } from "@site/src/data/builder-tools/slug";
 import { LanguageProperties, InterfaceProperties } from "@site/src/data/builder-tools/tags.js";
+import { ExtraLanguageProperties } from "@site/src/data/builder-tools/enriched-tags.js";
 import "./tree.css";
 
 export default function BuilderToolsTree() {
@@ -30,6 +31,7 @@ export default function BuilderToolsTree() {
       "governance":      "#d2a8ff",
       "testing":         "#ff7b72",
       "oracle":          "#f0883e",
+      "l2":              "#7c83fd",
     };
     const colorFor = c => CATEGORY_COLORS[c] || "#8b98ad";
 
@@ -131,16 +133,23 @@ export default function BuilderToolsTree() {
     const hardDepsOf = t => latestOf(t).dependencies || [];
     const softDepsOf = t => latestOf(t).softReferences || [];
 
-    // ---- readiness: one model, two sources --------------------------------
+    // ---- readiness: one model, three sources ------------------------------
     // "repos": Conway readiness detected from GitHub (plus curation), in
     //          enriched-tools.js.
+    // "repos-dijkstra": the same, for Dijkstra readiness.
     // "intersect": Intersect's Dijkstra (PV12) readiness tracker, per network,
     //          synced into intersect-readiness.js.
     // Both map to a rank (0 not ready … 3 ready, null = no info), so the same
     // dependency graph can tell which tools are held back by a dependency.
     const READINESS_SOURCES = {
-      repos:     { label: "Repos · Conway (detected)", short: "Conway" },
-      intersect: { label: "Intersect tracker · Dijkstra (PV12)", short: "Dijkstra" },
+      repos:            { label: "Repos · Conway (detected)", short: "Conway" },
+      "repos-dijkstra": { label: "Repos · Dijkstra (detected)", short: "Dijkstra" },
+      intersect:        { label: "Intersect tracker · Dijkstra (PV12)", short: "Dijkstra" },
+    };
+    // Detected sources: the flag on the latest release, and what counts as evidence
+    const DETECTED_READINESS = {
+      repos:            { flag: "conwayReady", era: "Conway", evidence: "names Conway, Plutus V3 or a governance CIP" },
+      "repos-dijkstra": { flag: "dijkstraReady", era: "Dijkstra", evidence: "names Dijkstra, Plutus V4 or a Dijkstra ledger CIP" },
     };
     const NETWORK_LABELS = {
       musashi: "Musashi", dijkstranet: "DijkstraNet", preview: "Preview", preprod: "PreProd", mainnet: "Mainnet",
@@ -151,7 +160,8 @@ export default function BuilderToolsTree() {
       "in-progress": { rank: 2, text: "in progress", cls: "progress" },
       "reached-out": { rank: 1, text: "reached out", cls: "early" },
     };
-    let readinessSource = "repos";
+    const DEFAULT_SOURCE = "repos-dijkstra";
+    let readinessSource = DEFAULT_SOURCE;
     let readinessNet = "mainnet";
 
     // { rank, text, cls, tip } — rank null means no information
@@ -170,14 +180,15 @@ export default function BuilderToolsTree() {
         return { rank: s.rank, text: s.text, cls: s.cls,
                  tip: `${s.tip || s.text[0].toUpperCase() + s.text.slice(1)} on ${net}${entry.criticalPath ? " · critical path" : ""}` };
       }
+      const { flag, era, evidence } = DETECTED_READINESS[readinessSource];
       const l = latestOf(t);
-      const curated = (l.overridden || []).includes("conwayReady");
-      if (l.conwayReady === true)
+      const curated = (l.overridden || []).includes(flag);
+      if (l[flag] === true)
         return { rank: 3, text: "✓", cls: "ready", curated,
-                 tip: curated ? "Conway-ready (curated)" : "Conway-ready: names Conway, Plutus V3 or a governance CIP" };
-      if (l.conwayReady === false)
-        return { rank: 0, text: "✗", cls: "not", curated: true, tip: "Not Conway-ready (curated)" };
-      return { rank: null, text: "?", cls: "none", tip: "Unknown: no Conway evidence found" };
+                 tip: curated ? `${era}-ready (curated)` : `${era}-ready: ${evidence}` };
+      if (l[flag] === false)
+        return { rank: 0, text: "✗", cls: "not", curated: true, tip: `Not ${era}-ready (curated)` };
+      return { rank: null, text: "?", cls: "none", tip: `Unknown: no ${era} evidence found` };
     }
 
     // Hard dependencies with known readiness below "ready" hold a tool back,
@@ -194,16 +205,27 @@ export default function BuilderToolsTree() {
       return { blockers, unknown };
     }
 
+    // A readiness filter is one of the classes above; how the chip and
+    // tooltips name it
+    const READY_FILTER_LABELS = {
+      ready: "ready", progress: "in progress", early: "reached out", not: "not ready", none: "with no info",
+    };
+
     // Small marks after a tool's name in the tree: its readiness, and a
     // "blocked" flag when a dependency is behind.
     function makeReadinessMarks(tool) {
       const frag = document.createDocumentFragment();
       const r = readinessOf(tool);
       if (r.rank !== null) {
-        const m = document.createElement("span");
+        const m = document.createElement("button");
+        m.type = "button";
         m.className = `rd-mark rd-${r.cls}`;
         m.textContent = r.text;
-        m.title = r.tip;
+        m.title = `${r.tip}\nClick: trait matrix of every tool ${READY_FILTER_LABELS[r.cls]}`;
+        m.addEventListener("click", e => {
+          e.stopPropagation();
+          toggleReadiness(r.cls);
+        });
         frag.appendChild(m);
       }
       const { blockers } = blockersOf(tool);
@@ -258,6 +280,7 @@ export default function BuilderToolsTree() {
       { key: "node-access",     label: "Node Access & RPC" },
       { key: "api",             label: "APIs & Providers" },
       { key: "node",            label: "Nodes & Clients" },
+      { key: "l2",              label: "Layer 2 & Scaling" },
     ];
     const UTILITIES_CATS = [
       { key: "dev-env",     label: "Developer Environments" },
@@ -306,6 +329,8 @@ export default function BuilderToolsTree() {
         });
         wrap.appendChild(btn);
       }
+      // Tools added from the DevX map aren't in the portal catalog, so have no page
+      if (tool.source === "devx") return wrap;
       const page = document.createElement("a");
       page.className = "tool-action";
       page.href = `${toolsUrl}${slugify(tool.title)}/`;
@@ -475,7 +500,7 @@ export default function BuilderToolsTree() {
       const readyCount = BuilderTools.filter(t => readinessOf(t).rank === 3).length;
       const readyWhat = readinessSource === "intersect"
         ? `Dijkstra-ready on ${NETWORK_LABELS[readinessNet]}`
-        : "Conway-ready";
+        : `${DETECTED_READINESS[readinessSource].era}-ready`;
       toolCountEl.innerHTML =
         `<strong>${BuilderTools.length}</strong> tools total · <strong>${filteredRoots.length}</strong> shown at root · <strong>${readyCount}</strong> ${readyWhat}`;
       if (viewSub) viewSub.textContent = VIEW_SUBS[`${dir}_${view}`];
@@ -524,11 +549,12 @@ export default function BuilderToolsTree() {
     };
     const propsOf = (t, facet) =>
       (t.properties || []).filter(p => facet[p]).map(p => ({ key: p, label: facet[p].label }));
+    const catalogSource = t => t.source === "devx" ? "from IOG DevX's tooling map" : "from the builder tools catalog";
     const TRAIT_KINDS = [
-      { key: "lang", label: "Language", source: "from the builder tools catalog",
-        of: t => propsOf(t, LanguageProperties) },
-      { key: "iface", label: "Interface", source: "from the builder tools catalog",
-        of: t => propsOf(t, InterfaceProperties) },
+      { key: "lang", label: "Language", source: "from the builder tools catalog, or IOG DevX's map for tools added from it",
+        sourceOf: catalogSource, of: t => propsOf(t, { ...LanguageProperties, ...ExtraLanguageProperties }) },
+      { key: "iface", label: "Interface", source: "from the builder tools catalog, or IOG DevX's map for tools added from it",
+        sourceOf: catalogSource, of: t => propsOf(t, InterfaceProperties) },
       { key: "license", label: "License", source: "from the GitHub repository",
         of: t => [licenseOf(t)] },
       { key: "cap", label: "Cardano capability", source: "detected from the latest release",
@@ -541,6 +567,7 @@ export default function BuilderToolsTree() {
     const healthOf = t => {
       const l = latestOf(t);
       const tags = [];
+      if (!t.repository) return [{ cls: "", text: "no repo", tip: "No public repository: health can't be read from GitHub" }];
       if (l.archived) tags.push({ cls: "bad", text: "archived", tip: "Archived on GitHub" });
       const age = daysSince(l.lastCommitDate);
       if (age !== null && age > STALE_DAYS)
@@ -552,6 +579,7 @@ export default function BuilderToolsTree() {
     };
     const healthRank = t => {
       const tags = healthOf(t).map(h => h.text);
+      if (tags.includes("no repo")) return 4;
       return tags.includes("archived") ? 3 : tags.includes("stale") ? 2 : tags.includes("pre-release") ? 1 : tags.length ? 0 : 4;
     };
 
@@ -576,10 +604,13 @@ export default function BuilderToolsTree() {
     }
 
     // The matrix filter: a tool (alone or with its branch), or traits (at
-    // most one per kind, all of which a tool must have)
-    const noSelection = () => ({ tool: null, branch: false, traits: {} });
+    // most one per kind, all of which a tool must have) and/or a readiness
+    // class (for the selected readiness source)
+    const noSelection = () => ({ tool: null, branch: false, traits: {}, readiness: null });
     let selection = noSelection();
     const traitFilters = () => Object.entries(selection.traits);
+    const hasFilters = () => traitFilters().length > 0 || !!selection.readiness;
+    const matchesFilters = t => hasTraits(t) && (!selection.readiness || readinessOf(t).cls === selection.readiness);
     const hasTraits = t => traitFilters().every(([kind, key]) => KIND[kind].of(t).some(x => x.key === key));
     const traitLabel = (kind, key) => {
       for (const t of BuilderTools) {
@@ -615,6 +646,12 @@ export default function BuilderToolsTree() {
     }
 
     const wrapEl = document.getElementById("btt-wrap");
+    // Height the pinned controls sit under: the portal's navbar, or 0 on the
+    // standalone page, which sets --ifm-navbar-height to 0 around the component
+    const navbarHeight = () => {
+      const h = parseInt(getComputedStyle(wrapEl).getPropertyValue("--ifm-navbar-height"), 10);
+      return Number.isNaN(h) ? 60 : h;
+    };
     const matrixEl = document.getElementById("matrix");
     const matrixCountEl = document.getElementById("matrixCount");
     const selChipEl = document.getElementById("selChip");
@@ -632,8 +669,8 @@ export default function BuilderToolsTree() {
     function matrixRows() {
       let rows;
       branchDepth = selection.branch && byTitle.has(selection.tool) ? branchOf(selection.tool) : new Map();
-      if (traitFilters().length) {
-        rows = sorted.filter(hasTraits);
+      if (hasFilters()) {
+        rows = sorted.filter(matchesFilters);
       } else if (selection.tool && byTitle.has(selection.tool)) {
         const titles = selection.branch ? branchDepth : new Set([selection.tool]);
         rows = sorted.filter(t => titles.has(t.title));
@@ -699,14 +736,17 @@ export default function BuilderToolsTree() {
       if (!matrixEl) return;
       const rows = matrixRows();
       const filters = traitFilters();
-      const selected = !!filters.length || (selection.tool && byTitle.has(selection.tool));
+      const selected = hasFilters() || (selection.tool && byTitle.has(selection.tool));
 
       // selection chip
       selChipEl.innerHTML = "";
       selChipEl.hidden = !selected;
       if (selected) {
-        selChipEl.appendChild(el("span", "", filters.length
-          ? filters.map(([kind, key]) => `${KIND[kind].label}: ${traitLabel(kind, key)}`).join(" · ")
+        const parts = filters.map(([kind, key]) => `${KIND[kind].label}: ${traitLabel(kind, key)}`);
+        if (selection.readiness)
+          parts.push(`${READINESS_SOURCES[readinessSource].short}: ${READY_FILTER_LABELS[selection.readiness]}`);
+        selChipEl.appendChild(el("span", "", parts.length
+          ? parts.join(" · ")
           : `${selection.branch ? "Branch" : "Tool"}: ${selection.tool}`));
         const x = el("button", "chip-x", "×");
         x.type = "button";
@@ -808,9 +848,12 @@ export default function BuilderToolsTree() {
         const r = readinessOf(t);
         const tdReady = el("td", "m-ready");
         tdReady.dataset.label = "Readiness";
-        const mark = el("span", `rd-mark rd-${r.cls}`, r.text || "—");
-        mark.title = r.tip;
+        const mark = el("button", `rd-mark rd-${r.cls}`, r.text || "—");
+        mark.type = "button";
+        mark.title = `${r.tip}\nClick: every tool ${READY_FILTER_LABELS[r.cls]}`;
         if (r.curated) mark.classList.add("curated");
+        if (selection.readiness === r.cls) mark.classList.add("active");
+        mark.addEventListener("click", () => toggleReadiness(r.cls));
         tdReady.appendChild(mark);
         const { blockers, unknown } = blockersOf(t);
         if (blockers.length) {
@@ -838,7 +881,7 @@ export default function BuilderToolsTree() {
             const tag = el("button", `trait-tag k-${kind.key}`, x.label);
             tag.type = "button";
             if (selection.traits[kind.key] === x.key) tag.classList.add("active");
-            tag.title = `${kind.label}${x.note ? ` (${x.note})` : ""}, ${kind.source}`;
+            tag.title = `${kind.label}${x.note ? ` (${x.note})` : ""}, ${kind.sourceOf?.(t) ?? kind.source}`;
             tag.addEventListener("click", () => toggleTrait(kind.key, x.key));
             tdTraits.appendChild(tag);
           }
@@ -876,8 +919,8 @@ export default function BuilderToolsTree() {
 
     // ---- selection, matrix open state, URL --------------------------------
     function markSelectionInTree() {
-      const branch = traitFilters().length
-        ? new Set(sorted.filter(hasTraits).map(t => t.title))
+      const branch = hasFilters()
+        ? new Set(sorted.filter(matchesFilters).map(t => t.title))
         : selection.tool && selection.branch ? branchOf(selection.tool) : null;
       treeEl.querySelectorAll(".node-row").forEach(r => {
         const t = r.dataset.title;
@@ -899,7 +942,8 @@ export default function BuilderToolsTree() {
       else p.delete("kinds");
       if (wrapEl.classList.contains("matrix-open")) p.set("matrix", "1"); else p.delete("matrix");
       if (wrapEl.classList.contains("tree-collapsed")) p.set("tree", "0"); else p.delete("tree");
-      if (readinessSource !== "repos") p.set("source", readinessSource); else p.delete("source");
+      if (readinessSource !== DEFAULT_SOURCE) p.set("source", readinessSource); else p.delete("source");
+      if (selection.readiness) p.set("ready", selection.readiness); else p.delete("ready");
       if (readinessSource === "intersect" && readinessNet !== "mainnet") p.set("net", readinessNet); else p.delete("net");
       window.history.replaceState(window.history.state, "", url.toString());
     }
@@ -914,7 +958,7 @@ export default function BuilderToolsTree() {
       updateMatrixScroll();
       document.getElementById("matrixToggle").setAttribute("aria-expanded", String(open));
       if (open && scroll) {
-        const nav = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--ifm-navbar-height")) || 60;
+        const nav = navbarHeight();
         window.scrollTo({ top: wrapEl.getBoundingClientRect().top + window.scrollY - nav, behavior: "smooth" });
       }
       writeUrl();
@@ -957,7 +1001,7 @@ export default function BuilderToolsTree() {
       const pinnedBottom = headerEl.getBoundingClientRect().bottom;
       const pr = panel.getBoundingClientRect();
       if (scrollPage && (pr.top < pinnedBottom || pr.top > window.innerHeight - 80)) {
-        const nav = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--ifm-navbar-height")) || 60;
+        const nav = navbarHeight();
         window.scrollTo({ top: wrapEl.getBoundingClientRect().top + window.scrollY - nav, behavior: "smooth" });
       }
       // Wait for the expand transition before measuring the row's position
@@ -980,11 +1024,84 @@ export default function BuilderToolsTree() {
     function toggleTrait(kind, key) {
       const traits = selection.tool ? {} : { ...selection.traits };
       if (traits[kind] === key) delete traits[kind]; else traits[kind] = key;
-      selection = { ...noSelection(), traits };
+      selection = { ...noSelection(), traits, readiness: selection.tool ? null : selection.readiness };
       sortForSelection();
       markSelectionInTree();
       renderMatrix();
       writeUrl();
+    }
+
+    // Clicking a readiness mark filters to every tool with that readiness
+    // (combined with any trait filters); clicking it again removes it.  From
+    // the tree, it opens the matrix to show the result.
+    function toggleReadiness(cls) {
+      const traits = selection.tool ? {} : { ...selection.traits };
+      selection = { ...noSelection(), traits, readiness: selection.readiness === cls ? null : cls };
+      sortForSelection();
+      if (!wrapEl.classList.contains("matrix-open")) setMatrixOpen(true);
+      markSelectionInTree();
+      renderMatrix();
+      writeUrl();
+    }
+
+    // Tree panel height: the grip at the right end of the category labels.
+    // Drag it (or focus it and use the arrow keys) to size the tree, which
+    // then scrolls inside; double-click it to go back to the default.  The
+    // height is remembered in this browser only.
+    {
+      const panel = document.getElementById("tree-panel");
+      const grip = document.getElementById("treeResize");
+      const KEY = "btt-tree-h";
+      const MIN = 120;
+      const clamp = h => Math.round(Math.min(Math.max(h, MIN), window.innerHeight * 0.9));
+      const setHeight = h => {
+        if (h === null) {
+          wrapEl.classList.remove("tree-sized");
+          wrapEl.style.removeProperty("--btt-tree-h");
+        } else {
+          wrapEl.classList.add("tree-sized");
+          wrapEl.style.setProperty("--btt-tree-h", `${clamp(h)}px`);
+        }
+        updateMatrixScroll();
+      };
+      const save = () => {
+        try {
+          const h = wrapEl.style.getPropertyValue("--btt-tree-h");
+          if (h) localStorage.setItem(KEY, h); else localStorage.removeItem(KEY);
+        } catch { /* storage unavailable */ }
+      };
+      try {
+        const saved = parseInt(localStorage.getItem(KEY), 10);
+        if (!Number.isNaN(saved)) setHeight(saved);
+      } catch { /* storage unavailable */ }
+
+      let drag = null;
+      grip.addEventListener("pointerdown", e => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        drag = { y: e.clientY, h: panel.getBoundingClientRect().height };
+        grip.setPointerCapture(e.pointerId);
+        wrapEl.classList.add("tree-resizing");
+      });
+      grip.addEventListener("pointermove", e => {
+        if (drag) setHeight(drag.h + e.clientY - drag.y);
+      });
+      const end = () => {
+        if (!drag) return;
+        drag = null;
+        wrapEl.classList.remove("tree-resizing");
+        save();
+      };
+      grip.addEventListener("pointerup", end);
+      grip.addEventListener("pointercancel", end);
+      grip.addEventListener("dblclick", () => { setHeight(null); save(); });
+      grip.addEventListener("keydown", e => {
+        const step = e.shiftKey ? 120 : 24;
+        if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+        e.preventDefault();
+        setHeight(panel.getBoundingClientRect().height + (e.key === "ArrowDown" ? step : -step));
+        save();
+      });
     }
 
     // Tree panel toggle (the "Dependency / Dependents tree" title)
@@ -1119,11 +1236,12 @@ export default function BuilderToolsTree() {
           visibleKinds.add(kind.key);
         }
       }
-      if (Object.keys(traits).length) selection = { ...noSelection(), traits };
+      const ready = READY_FILTER_LABELS[p.get("ready")] ? p.get("ready") : null;
+      if (Object.keys(traits).length || ready) selection = { ...noSelection(), traits, readiness: ready };
       else if (t && byTitle.has(t)) selection = { ...noSelection(), tool: t, branch: p.get("branch") === "1" };
       sortForSelection();
       syncKindsPop();
-      if (p.get("matrix") === "1" || selection.tool || traitFilters().length) setMatrixOpen(true, false);
+      if (p.get("matrix") === "1" || selection.tool || hasFilters()) setMatrixOpen(true, false);
       if (p.get("tree") === "0") setTreeOpen(false);
     }
 
@@ -1195,7 +1313,7 @@ export default function BuilderToolsTree() {
             }
           }
           updateLegendVisuals();
-          if (selection.tool || traitFilters().length) { selection = noSelection(); sortForSelection(); writeUrl(); }
+          if (selection.tool || hasFilters()) { selection = noSelection(); sortForSelection(); writeUrl(); }
           renderTree();
         });
 
@@ -1255,7 +1373,13 @@ export default function BuilderToolsTree() {
       </div>
 
       <div className="btt-footer">
-        <div id="legend" className="btt-legend"></div>
+        <div id="legend" className="btt-legend">
+          <div className="tree-resize" id="treeResize" role="separator" aria-orientation="horizontal"
+               aria-controls="tree-panel" aria-label="Resize the dependency tree" tabIndex={0}
+               title="Drag to resize the tree · double-click to reset">
+            <span aria-hidden></span>
+          </div>
+        </div>
 
         <div className="btt-matrix-bar">
           <button type="button" className="ctl panel-toggle matrix-toggle" id="matrixToggle" aria-expanded="false" aria-controls="matrix">
@@ -1264,8 +1388,9 @@ export default function BuilderToolsTree() {
           <span className="sel-chip" id="selChip" hidden></span>
           <label className="rd-control">
             Readiness
-            <select id="readinessSource" defaultValue="repos" aria-label="Readiness source">
+            <select id="readinessSource" defaultValue="repos-dijkstra" aria-label="Readiness source">
               <option value="repos">Repos · Conway (detected)</option>
+              <option value="repos-dijkstra">Repos · Dijkstra (detected)</option>
               <option value="intersect">Intersect tracker · Dijkstra (PV12)</option>
             </select>
             <select id="readinessNet" defaultValue="mainnet" aria-label="Network" hidden>
